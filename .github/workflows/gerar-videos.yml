@@ -1,0 +1,29 @@
+name: Gerar videos Shopee
+
+on:
+  schedule:
+    - cron: "0 10 * * *"   # 10:00 UTC = 07:00 Brasília, todos os dias
+  workflow_dispatch: {}     # botão de teste manual
+
+jobs:
+  gerar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Instalar dependências
+        run: pip install -r requirements.txt
+
+      - name: Verificar ffmpeg (já vem no runner)
+        run: ffmpeg -version | head -1
+
+      - name: Gerar e enviar vídeos
+        run: python src/main.py
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
