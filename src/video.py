@@ -2,26 +2,33 @@ import subprocess
 import tempfile
 
 def montar_video(imagem: str, audio: str, texto_tela: str, saida: str):
-    """Monta vídeo vertical 1080x1920: imagem com zoom lento + texto no topo + narração."""
-    # Texto da tela vai em arquivo temporário (evita problemas de escape/acentos)
+    """Vídeo vertical 1080x1920 com composição profissional:
+    fundo desfocado preenchendo o quadro, produto inteiro em destaque
+    (sem corte e sem esticar), zoom sutil, texto fixo no topo e narração."""
     with tempfile.NamedTemporaryFile("w", suffix=".txt", delete=False, encoding="utf-8") as f:
         f.write(texto_tela)
         textfile = f.name
 
     filtro = (
-        "[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,"
-        "zoompan=z='min(zoom+0.0006,1.18)':d=1200:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':fps=30,"
-        "drawtext=textfile='%s':font='DejaVu Sans':fontsize=68:fontcolor=white:"
-        "borderw=6:bordercolor=black:x=(w-text_w)/2:y=h*0.12[v]"
+        "[0:v]split=2[bg][p];"
+        "[bg]scale=540:960:force_original_aspect_ratio=increase,crop=540:960,"
+        "gblur=sigma=20,eq=brightness=-0.07,scale=1080:1920[bgb];"
+        "[p]scale=950:1000:force_original_aspect_ratio=decrease[pf];"
+        "[bgb][pf]overlay=(W-w)/2:(H-h)/2+68[comp];"
+        "[comp]zoompan=z='min(zoom+0.00015,1.12)':d=1800:"
+        "x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s=1080x1920:fps=30,"
+        "fade=t=in:st=0:d=0.4,"
+        "drawtext=textfile='%s':font='DejaVu Sans':fontsize=62:fontcolor=white:"
+        "borderw=6:bordercolor=black:x=(w-text_w)/2:y=h*0.15:line_spacing=18[v]"
     ) % textfile
 
     cmd = [
         "ffmpeg", "-y",
-        "-loop", "1", "-i", imagem,
+        "-i", imagem,
         "-i", audio,
         "-filter_complex", filtro,
         "-map", "[v]", "-map", "1:a",
-        "-c:v", "libx264", "-preset", "fast", "-pix_fmt", "yuv420p",
+        "-c:v", "libx264", "-preset", "fast", "-crf", "20", "-pix_fmt", "yuv420p",
         "-c:a", "aac", "-b:a", "128k",
         "-shortest", saida,
     ]
