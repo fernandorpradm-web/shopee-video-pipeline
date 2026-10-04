@@ -1,7 +1,9 @@
-      - name: Sincronizar imagens do Telegram
-        run: python src/sync_imagens.py
-        env:
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+name: Sincronizar imagens do Telegram
+run: python src/sync_imagens.py
+env:
+TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+
+
 name: Gerar videos Shopee
 
 on:
