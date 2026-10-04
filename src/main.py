@@ -34,6 +34,24 @@ def ids_conhecidos():
     return {p["id"] for p in config["produtos"]}
 
 
+def resolver_imagem(produto):
+    """Resolve a imagem do produto: URL, arquivo informado ou imagens/{id}.* automático."""
+    ref = produto.get("imagem", "").strip()
+    if ref.startswith("http"):
+        local = os.path.join(PASTA_SAIDA, f"{produto['id']}.jpg")
+        baixar_imagem(ref, local)
+        return local
+    if ref and os.path.exists(ref):
+        return ref
+    candidatos = glob.glob(os.path.join("imagens", f"{produto['id']}.*"))
+    if candidatos:
+        return candidatos[0]
+    raise FileNotFoundError(
+        f"Imagem não encontrada para '{produto['id']}'. "
+        f"Envie a foto pro bot do Telegram com legenda '{produto['id']}'."
+    )
+    
+
 def processar():
     os.makedirs(PASTA, exist_ok=True)
     ids = ids_conhecidos()
@@ -105,12 +123,8 @@ def processar(config: dict):
         nome = produto["id"]
         print(f"[{i}] Gerando: {nome}")
         try:
-            # 1. Imagem (URL da Shopee ou arquivo local)
-            imagem = produto["imagem"]
-            if imagem.startswith("http"):
-                local = os.path.join(PASTA_SAIDA, f"{nome}.jpg")
-                baixar_imagem(imagem, local)
-                imagem = local
+            # 1. Imagem (URL, arquivo ou automática via imagens/{id})
+            imagem = resolver_imagem(produto)
 
             # 2. Narração (edge-tts)
             audio = os.path.join(PASTA_SAIDA, f"{nome}.mp3")
