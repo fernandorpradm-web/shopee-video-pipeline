@@ -5,6 +5,9 @@ on:
     - cron: "0 10 * * *"   # 10:00 UTC = 07:00 Brasília, todos os dias
   workflow_dispatch: {}     # botão de teste manual
 
+permissions:
+  contents: write           # necessário para o commit das imagens sincronizadas
+
 jobs:
   gerar:
     runs-on: ubuntu-latest
@@ -16,16 +19,34 @@ jobs:
         with:
           python-version: "3.11"
 
+      - name: Instalar ffmpeg
+        run: sudo apt-get update -qq && sudo apt-get install -y ffmpeg && ffmpeg -version | head -1
+
       - name: Instalar dependências
         run: pip install -r requirements.txt
-
-      - name: Verificar ffmpeg (já vem no runner)
-        run: ffmpeg -version | head -1
 
       - name: Sincronizar imagens do Telegram
         run: python src/sync_imagens.py
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+
+      - name: Salvar imagens no repositório
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if [ -d imagens ] && [ -n "$(ls -A imagens 2>/dev/null)" ]; then
+            git add imagens
+            if ! git diff --cached --quiet; then
+              git commit -m "Imagens sincronizadas do Telegram"
+              git push
+            fi
+          fi
+
+      - name: Gerar e enviar vídeos
+        run: python src/main.py
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
 
       - name: Gerar e enviar vídeos
         run: python src/main.py
