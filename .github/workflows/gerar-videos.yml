@@ -1,9 +1,3 @@
-name: Sincronizar imagens do Telegram
-run: python src/sync_imagens.py
-env:
-TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-
-
 name: Gerar videos Shopee
 
 on:
@@ -27,6 +21,11 @@ jobs:
 
       - name: Verificar ffmpeg (já vem no runner)
         run: ffmpeg -version | head -1
+
+      - name: Sincronizar imagens do Telegram
+        run: python src/sync_imagens.py
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
 
       - name: Gerar e enviar vídeos
         run: python src/main.py
