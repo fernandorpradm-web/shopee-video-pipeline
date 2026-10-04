@@ -1,55 +1,35 @@
-name: Gerar videos Shopee
+import subprocess
+import tempfile
 
-on:
-  schedule:
-    - cron: "0 10 * * *"   # 10:00 UTC = 07:00 Brasília, todos os dias
-  workflow_dispatch: {}     # botão de teste manual
+def montar_video(imagem: str, audio: str, texto_tela: str, saida: str):
+    """Vídeo vertical 1080x1920 com composição profissional:
+    fundo desfocado preenchendo o quadro, produto inteiro em destaque
+    (sem corte e sem esticar), zoom sutil, texto fixo no topo e narração."""
+    with tempfile.NamedTemporaryFile("w", suffix=".txt", delete=False, encoding="utf-8") as f:
+        f.write(texto_tela)
+        textfile = f.name
 
-permissions:
-  contents: write           # necessário para o commit das imagens sincronizadas
+    filtro = (
+        "[0:v]split=2[bg][p];"
+        "[bg]scale=540:960:force_original_aspect_ratio=increase,crop=540:960,"
+        "gblur=sigma=20,eq=brightness=-0.07,scale=1080:1920[bgb];"
+        "[p]scale=950:1000:force_original_aspect_ratio=decrease[pf];"
+        "[bgb][pf]overlay=(W-w)/2:(H-h)/2+68[comp];"
+        "[comp]zoompan=z='min(zoom+0.00015,1.12)':d=1800:"
+        "x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s=1080x1920:fps=30,"
+        "fade=t=in:st=0:d=0.4,"
+        "drawtext=textfile='%s':font='DejaVu Sans':fontsize=62:fontcolor=white:"
+        "borderw=6:bordercolor=black:x=(w-text_w)/2:y=h*0.15:line_spacing=18[v]"
+    ) % textfile
 
-jobs:
-  gerar:
-    runs-on: ubuntu-latest
-    timeout-minutes: 60
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-
-      - name: Instalar ffmpeg
-        run: sudo apt-get update -qq && sudo apt-get install -y ffmpeg && ffmpeg -version | head -1
-
-      - name: Instalar dependências
-        run: pip install -r requirements.txt
-
-      - name: Sincronizar imagens do Telegram
-        run: python src/sync_imagens.py
-        env:
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-
-      - name: Salvar imagens no repositório
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          if [ -d imagens ] && [ -n "$(ls -A imagens 2>/dev/null)" ]; then
-            git add imagens
-            if ! git diff --cached --quiet; then
-              git commit -m "Imagens sincronizadas do Telegram"
-              git push
-            fi
-          fi
-
-      - name: Gerar e enviar vídeos
-        run: python src/main.py
-        env:
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-
-      - name: Gerar e enviar vídeos
-        run: python src/main.py
-        env:
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+    cmd = [
+        "ffmpeg", "-y",
+        "-i", imagem,
+        "-i", audio,
+        "-filter_complex", filtro,
+        "-map", "[v]", "-map", "1:a",
+        "-c:v", "libx264", "-preset", "fast", "-crf", "20", "-pix_fmt", "yuv420p",
+        "-c:a", "aac", "-b:a", "128k",
+        "-shortest", saida,
+    ]
+    subprocess.run(cmd, check=True, capture_output=True)
