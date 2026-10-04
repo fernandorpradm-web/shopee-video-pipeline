@@ -135,7 +135,8 @@ def processar(config: dict):
             montar_video(imagem, audio, produto.get("texto_tela", produto["titulo"]), video)
 
             # 4. Envio ao Telegram
-            legenda = f"{produto['titulo']}\n{produto['link_afiliado']}"
+            hashtags = produto.get("hashtags", "")
+            legenda = f"{produto['titulo']}\n{produto['link_afiliado']}\n\n{hashtags}".strip()
             enviar_video(video, legenda)
             enviados += 1
             print(f"[{i}] Enviado ao Telegram: {nome}")
