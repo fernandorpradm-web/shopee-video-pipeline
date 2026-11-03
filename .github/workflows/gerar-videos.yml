@@ -70,9 +70,9 @@ jobs:
           SHOPEE_APP_ID: ${{ secrets.SHOPEE_APP_ID }}
           SHOPEE_APP_SECRET: ${{ secrets.SHOPEE_APP_SECRET }}
 
-      - name: 2. Sincronizar imagens do Telegram
+      - name: 2. Gerar e enviar vídeos
         if: ${{ inputs.testar != true && inputs.stats != true }}
-        run: python src/sync_imagens.py
+        run: python src/main.py --limite 5
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
