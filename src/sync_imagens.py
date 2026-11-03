@@ -1,4 +1,6 @@
-import glob
+#!/usr/bin/env python3
+"""Sincroniza imagens enviadas ao bot do Telegram (override manual)."""
+
 import json
 import os
 import re
@@ -6,13 +8,13 @@ import urllib.request
 
 import requests
 
-TOKEN = os.environ["TELEGRAM_BOT_TOKEN"]
-API = f"https://api.telegram.org/bot{TOKEN}"
+TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "").strip()
+API = "https://api.telegram.org/bot%s" % TOKEN
 PASTA = "imagens"
 
 
 def api(metodo, **params):
-    r = requests.get(f"{API}/{metodo}", params=params, timeout=30)
+    r = requests.get("%s/%s" % (API, metodo), params=params, timeout=30)
     r.raise_for_status()
     return r.json()
 
@@ -25,56 +27,69 @@ def baixar(url, destino):
 
 def baixar_do_telegram(file_id, destino):
     info = api("getFile", file_id=file_id)["result"]
-    baixar(f"https://api.telegram.org/file/bot{TOKEN}/{info['file_path']}", destino)
+    baixar("https://api.telegram.org/file/bot%s/%s" % (TOKEN, info["file_path"]),
+           destino)
 
 
 def ids_conhecidos():
+    """Aceita lista direta (minerador) ou dict com 'produtos'."""
     with open("produtos.json", encoding="utf-8-sig") as f:
-        config = json.load(f)
-    return {p["id"] for p in config["produtos"]}
+        dados = json.load(f)
+    if isinstance(dados, dict):
+        dados = dados.get("produtos") or dados.get("itens") or []
+    return set(str(p.get("id")) for p in dados if isinstance(p, dict))
 
 
 def processar():
+    if not TOKEN:
+        print("TELEGRAM_BOT_TOKEN ausente — sync ignorado.")
+        return
+
     os.makedirs(PASTA, exist_ok=True)
     ids = ids_conhecidos()
-    updates = api("getUpdates", timeout=0)["result"]
+    if not ids:
+        print("produtos.json sem ids — nada a sincronizar.")
+        return
+
+    updates = api("getUpdates", timeout=0).get("result") or []
     if not updates:
         print("Nenhuma mensagem nova no bot.")
         return
 
-    ultimo = 0
-    salvos = 0
+    ultimo, salvos = 0, 0
     for u in updates:
         ultimo = u["update_id"] + 1
         msg = u.get("message") or {}
         chat = msg.get("chat", {}).get("id")
         legenda = (msg.get("caption") or msg.get("text") or "").strip()
-        foto = msg.get("photo")          # foto comprimida pelo Telegram
-        doc = msg.get("document")        # arquivo (resolução original)
+        foto = msg.get("photo")
+        doc = msg.get("document")
 
         if (foto or doc) and legenda in ids:
             file_id = foto[-1]["file_id"] if foto else doc["file_id"]
             info = api("getFile", file_id=file_id)["result"]
             ext = os.path.splitext(info["file_path"])[1] or ".jpg"
-            destino = os.path.join(PASTA, f"{legenda}{ext}")
+            destino = os.path.join(PASTA, "%s%s" % (legenda, ext))
             baixar_do_telegram(file_id, destino)
-            api("sendMessage", chat_id=chat, text=f"✅ Imagem salva: {legenda}")
+            api("sendMessage", chat_id=chat, text="Imagem salva: %s" % legenda)
             salvos += 1
-            print(f"Salvo: {destino}")
         elif (foto or doc) and legenda:
-            api("sendMessage", chat_id=chat, text=f"❌ ID '{legenda}' não existe no produtos.json")
+            api("sendMessage", chat_id=chat,
+                text="ID '%s' nao existe no produtos.json" % legenda)
         elif (foto or doc):
-            api("sendMessage", chat_id=chat, text="⚠️ Envie a foto com legenda = id do produto (ex.: varal-3-andares)")
+            api("sendMessage", chat_id=chat,
+                text="Envie a foto com legenda igual ao id do produto.")
         elif legenda:
             m = re.match(r"(\S+)\s+(https?://\S+)", legenda)
             if m and m.group(1) in ids:
-                baixar(m.group(2), os.path.join(PASTA, f"{m.group(1)}.jpg"))
-                api("sendMessage", chat_id=chat, text=f"✅ Imagem baixada de URL: {m.group(1)}")
+                baixar(m.group(2), os.path.join(PASTA, "%s.jpg" % m.group(1)))
+                api("sendMessage", chat_id=chat,
+                    text="Imagem baixada: %s" % m.group(1))
                 salvos += 1
 
     if ultimo:
-        api("getUpdates", offset=ultimo)  # confirma o processamento
-    print(f"Resumo do sync: {salvos} imagens novas.")
+        api("getUpdates", offset=ultimo)
+    print("Resumo do sync: %d imagens novas." % salvos)
 
 
 if __name__ == "__main__":
