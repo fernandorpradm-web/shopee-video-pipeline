@@ -47,3 +47,9 @@ jobs:
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          
+      - name: Minerar oportunidades Shopee
+        run: python src/minerador.py
+        env:
+          SHOPEE_APP_ID: ${{ secrets.SHOPEE_APP_ID }}
+          SHOPEE_APP_SECRET: ${{ secrets.SHOPEE_APP_SECRET }}
