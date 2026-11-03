@@ -36,9 +36,9 @@ KEYWORDS_CASA = [
     "percarbonato",
 ]
 
-MIN_COMISSAO = 8.0     # R$ por venda — abaixo disso não paga o clique
-MIN_VENDAS = 500       # prova social
-MIN_RATING = 4.5
+MIN_COMISSAO = 6.0     # era 8.0 — o pago está pausado, orgânico não tem custo por clique
+MIN_VENDAS = 250       # era 500 — libera a faixa de bestseller intermediário
+MIN_RATING = 4.4       # era 4.5 — o corte de 4.5 nunca barrou nada
 QTD_DEFAULT = 5
 HIST = "historico.json"
 SAIDA = "produtos.json"
