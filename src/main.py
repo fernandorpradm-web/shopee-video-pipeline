@@ -1,107 +1,11 @@
-import glob
-import json
-import os
-import re
-import urllib.request
+#!/usr/bin/env python3
+"""Gera e envia os videos a partir de produtos.json."""
 
-import requests
-
-TOKEN = os.environ["TELEGRAM_BOT_TOKEN"]
-API = f"https://api.telegram.org/bot{TOKEN}"
-PASTA = "imagens"
-
-
-def api(metodo, **params):
-    r = requests.get(f"{API}/{metodo}", params=params, timeout=30)
-    r.raise_for_status()
-    return r.json()
-
-
-def baixar(url, destino):
-    req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
-    with urllib.request.urlopen(req, timeout=60) as resp, open(destino, "wb") as f:
-        f.write(resp.read())
-
-
-def baixar_do_telegram(file_id, destino):
-    info = api("getFile", file_id=file_id)["result"]
-    baixar(f"https://api.telegram.org/file/bot{TOKEN}/{info['file_path']}", destino)
-
-
-def ids_conhecidos():
-    with open("produtos.json", encoding="utf-8-sig") as f:
-        config = json.load(f)
-    return {p["id"] for p in config["produtos"]}
-
-
-def resolver_imagem(produto):
-    """Resolve a imagem do produto: URL, arquivo informado ou imagens/{id}.* automático."""
-    ref = produto.get("imagem", "").strip()
-    if ref.startswith("http"):
-        local = os.path.join(PASTA_SAIDA, f"{produto['id']}.jpg")
-        baixar_imagem(ref, local)
-        return local
-    if ref and os.path.exists(ref):
-        return ref
-    candidatos = glob.glob(os.path.join("imagens", f"{produto['id']}.*"))
-    if a.stats:
-        stats(candidatos)
-        return
-    raise FileNotFoundError(
-        f"Imagem não encontrada para '{produto['id']}'. "
-        f"Envie a foto pro bot do Telegram com legenda '{produto['id']}'."
-    )
-    
-
-def processar():
-    os.makedirs(PASTA, exist_ok=True)
-    ids = ids_conhecidos()
-    updates = api("getUpdates", timeout=0)["result"]
-    if not updates:
-        print("Nenhuma mensagem nova no bot.")
-        return
-
-    ultimo = 0
-    salvos = 0
-    for u in updates:
-        ultimo = u["update_id"] + 1
-        msg = u.get("message") or {}
-        chat = msg.get("chat", {}).get("id")
-        legenda = (msg.get("caption") or msg.get("text") or "").strip()
-        foto = msg.get("photo")          # foto comprimida pelo Telegram
-        doc = msg.get("document")        # arquivo (resolução original)
-
-        if (foto or doc) and legenda in ids:
-            file_id = foto[-1]["file_id"] if foto else doc["file_id"]
-            info = api("getFile", file_id=file_id)["result"]
-            ext = os.path.splitext(info["file_path"])[1] or ".jpg"
-            destino = os.path.join(PASTA, f"{legenda}{ext}")
-            baixar_do_telegram(file_id, destino)
-            api("sendMessage", chat_id=chat, text=f"✅ Imagem salva: {legenda}")
-            salvos += 1
-            print(f"Salvo: {destino}")
-        elif (foto or doc) and legenda:
-            api("sendMessage", chat_id=chat, text=f"❌ ID '{legenda}' não existe no produtos.json")
-        elif (foto or doc):
-            api("sendMessage", chat_id=chat, text="⚠️ Envie a foto com legenda = id do produto (ex.: varal-3-andares)")
-        elif legenda:
-            m = re.match(r"(\S+)\s+(https?://\S+)", legenda)
-            if m and m.group(1) in ids:
-                baixar(m.group(2), os.path.join(PASTA, f"{m.group(1)}.jpg"))
-                api("sendMessage", chat_id=chat, text=f"✅ Imagem baixada de URL: {m.group(1)}")
-                salvos += 1
-
-    if ultimo:
-        api("getUpdates", offset=ultimo)  # confirma o processamento
-    print(f"Resumo do sync: {salvos} imagens novas.")
-
-
-if __name__ == "__main__":
-    processar()
-import sys
+import argparse
 import asyncio
 import json
 import os
+import sys
 import urllib.request
 
 from tts import gerar_audio
@@ -109,46 +13,117 @@ from video import montar_video
 from telegram import enviar_video
 
 PASTA_SAIDA = "saida"
+PASTA_IMAGENS = "imagens"
+VOZ_PADRAO = "pt-BR-FranciscaNeural"
 
-def baixar_imagem(url: str, destino: str):
+
+def carregar_produtos(caminho="produtos.json"):
+    """Aceita lista direta (minerador) ou dict com 'produtos' (formato antigo)."""
+    with open(caminho, encoding="utf-8-sig") as f:
+        dados = json.load(f)
+    if isinstance(dados, dict):
+        return dados.get("produtos") or dados.get("itens") or []
+    return dados if isinstance(dados, list) else []
+
+
+def campo(produto, *nomes, **kw):
+    """Retorna o primeiro valor nao vazio entre as variantes de chave."""
+    for n in nomes:
+        v = produto.get(n)
+        if v not in (None, "", []):
+            return v
+    return kw.get("default", "")
+
+
+def baixar_imagem(url, destino):
     req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
-    with urllib.request.urlopen(req, timeout=30) as r, open(destino, "wb") as f:
+    with urllib.request.urlopen(req, timeout=45) as r, open(destino, "wb") as f:
         f.write(r.read())
 
-def processar(config: dict):
-    os.makedirs(PASTA_SAIDA, exist_ok=True)
-    voz = config.get("voz", "pt-BR-FranciscaNeural")
-    enviados, falhas = 0, 0
 
-    for i, produto in enumerate(config["produtos"], 1):
-        nome = produto["id"]
-        print(f"[{i}] Gerando: {nome}")
+def resolver_imagem(produto):
+    """URL baixa; arquivo local informado; ou imagens/{id}.* automatico."""
+    os.makedirs(PASTA_IMAGENS, exist_ok=True)
+    pid = str(campo(produto, "id")).strip()
+    ref = str(campo(produto, "imagem", "image")).strip()
+
+    if ref.startswith("http"):
+        local = os.path.join(PASTA_IMAGENS, "%s.jpg" % pid)
+        baixar_imagem(ref, local)
+        return local
+
+    if ref and os.path.exists(ref):
+        return ref
+
+    for ext in (".jpg", ".jpeg", ".png", ".webp"):
+        cand = os.path.join(PASTA_IMAGENS, pid + ext)
+        if os.path.exists(cand):
+            return cand
+
+    raise FileNotFoundError(
+        "Imagem nao encontrada para '%s'. Envie ao bot do Telegram com "
+        "legenda igual ao id, ou use --sem-envio para so gerar o video." % pid
+    )
+
+
+def processar(produtos, voz=VOZ_PADRAO, enviar=True, limite=0):
+    os.makedirs(PASTA_SAIDA, exist_ok=True)
+    if limite > 0:
+        produtos = produtos[:limite]
+
+    ok, falhas = 0, 0
+
+    for i, produto in enumerate(produtos, 1):
+        nome = str(campo(produto, "id")) or "produto_%d" % i
+        print("[%d/%d] %s" % (i, len(produtos), nome))
         try:
-            # 1. Imagem (URL, arquivo ou automática via imagens/{id})
+            roteiro = campo(produto, "script", "narration", "texto")
+            if not roteiro:
+                raise ValueError("Sem roteiro (script/narration/texto)")
+
             imagem = resolver_imagem(produto)
 
-            # 2. Narração (edge-tts)
-            audio = os.path.join(PASTA_SAIDA, f"{nome}.mp3")
-            asyncio.run(gerar_audio(produto["script"], audio, voz))
+            audio = os.path.join(PASTA_SAIDA, "%s.mp3" % nome)
+            asyncio.run(gerar_audio(roteiro, audio, voz))
 
-            # 3. Vídeo (ffmpeg)
-            video = os.path.join(PASTA_SAIDA, f"{nome}.mp4")
-            montar_video(imagem, audio, produto.get("texto_tela", produto["titulo"]), video)
+            titulo = campo(produto, "titulo", "title")
+            texto_tela = campo(produto, "texto_tela", default=titulo)
+            video = os.path.join(PASTA_SAIDA, "%s.mp4" % nome)
+            montar_video(imagem, audio, texto_tela, video)
 
-            # 4. Envio ao Telegram
-            hashtags = produto.get("hashtags", "")
-            legenda = f"{produto['titulo']}\n{produto['link_afiliado']}\n\n{hashtags}".strip()
-            enviar_video(video, legenda)
-            enviados += 1
-            print(f"[{i}] Enviado ao Telegram: {nome}")
+            if enviar:
+                link = campo(produto, "link_afiliado", "link", "url")
+                hashtags = campo(produto, "hashtags")
+                legenda = "%s\n%s\n\n%s" % (titulo, link, hashtags)
+                enviar_video(video, legenda.strip())
+
+            ok += 1
+            print("   OK")
         except Exception as erro:
             falhas += 1
-            print(f"[{i}] FALHA em {nome}: {erro}")
+            print("   FALHA: %s" % erro)
 
-    print(f"Resumo: {enviados} enviados, {falhas} falhas.")
-    if falhas and not enviados:
+    print("Resumo: %d ok, %d falhas" % (ok, falhas))
+    if falhas and ok == 0:
         sys.exit(1)
 
+
+def main():
+    ap = argparse.ArgumentParser(description="Gerador de videos de afiliado")
+    ap.add_argument("--limite", type=int, default=0, help="maximo de produtos")
+    ap.add_argument("--voz", default=VOZ_PADRAO)
+    ap.add_argument("--sem-envio", action="store_true", help="gera sem enviar")
+    ap.add_argument("--enviar", action="store_true",
+                    help="compatibilidade: envio ja e o padrao")
+    a = ap.parse_args()
+
+    produtos = carregar_produtos()
+    if not produtos:
+        sys.exit("produtos.json vazio ou em formato inesperado.")
+
+    print("Carregados %d produtos." % len(produtos))
+    processar(produtos, voz=a.voz, enviar=not a.sem_envio, limite=a.limite)
+
+
 if __name__ == "__main__":
-    with open("produtos.json", encoding="utf-8") as f:
-        processar(json.load(f))
+    main()
