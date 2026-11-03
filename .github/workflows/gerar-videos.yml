@@ -2,7 +2,7 @@ name: Pipeline Diário Afiliado
 
 on:
   schedule:
-    - cron: '0 10 * * *'        # 07:00 horário de Brasília (UTC-3)
+    - cron: '0 10 * * *'
   workflow_dispatch:
     inputs:
       qtd:
@@ -10,16 +10,20 @@ on:
         required: false
         default: '5'
       testar:
-        description: 'Só validar credencial da Shopee (não gera vídeo)'
+        description: 'Só validar credencial da Shopee'
+        type: boolean
+        default: false
+      stats:
+        description: 'Só calibrar cortes (grade de simulação)'
         type: boolean
         default: false
 
 permissions:
-  contents: write               # necessário para o push do histórico
+  contents: write
 
 concurrency:
   group: pipeline-afiliado
-  cancel-in-progress: false     # evita duas execuções disputando o mesmo commit
+  cancel-in-progress: false
 
 jobs:
   pipeline:
@@ -39,12 +43,12 @@ jobs:
           cache: 'pip'
 
       - name: Instalar ffmpeg
+        if: ${{ inputs.testar != true && inputs.stats != true }}
         run: sudo apt-get update && sudo apt-get install -y ffmpeg
 
       - name: Instalar dependências
         run: pip install -r requirements.txt
 
-      # ---------- MODO TESTE: só valida a Shopee ----------
       - name: Testar credencial Shopee
         if: ${{ inputs.testar == true }}
         run: python src/minerador.py --testar
@@ -52,46 +56,47 @@ jobs:
           SHOPEE_APP_ID: ${{ secrets.SHOPEE_APP_ID }}
           SHOPEE_APP_SECRET: ${{ secrets.SHOPEE_APP_SECRET }}
 
-      # ---------- PIPELINE DIÁRIO ----------
+      - name: Calibrar cortes
+        if: ${{ inputs.stats == true }}
+        run: python src/minerador.py --stats
+        env:
+          SHOPEE_APP_ID: ${{ secrets.SHOPEE_APP_ID }}
+          SHOPEE_APP_SECRET: ${{ secrets.SHOPEE_APP_SECRET }}
+
       - name: 1. Minerar oportunidades
-        if: ${{ inputs.testar != true }}
+        if: ${{ inputs.testar != true && inputs.stats != true }}
         run: python src/minerador.py --qtd ${{ inputs.qtd || '5' }}
         env:
           SHOPEE_APP_ID: ${{ secrets.SHOPEE_APP_ID }}
           SHOPEE_APP_SECRET: ${{ secrets.SHOPEE_APP_SECRET }}
 
       - name: 2. Sincronizar imagens do Telegram
-        if: ${{ inputs.testar != true }}
+        if: ${{ inputs.testar != true && inputs.stats != true }}
         run: python src/sync_imagens.py
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
 
       - name: 3. Gerar vídeos
-        if: ${{ inputs.testar != true }}
+        if: ${{ inputs.testar != true && inputs.stats != true }}
         run: python src/main.py --limite 5
 
       - name: 4. Enviar ao Telegram
-        if: ${{ inputs.testar != true }}
+        if: ${{ inputs.testar != true && inputs.stats != true }}
         run: python src/main.py --enviar
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
 
       - name: 5. Commitar produtos e histórico
-        if: ${{ success() && inputs.testar != true }}
+        if: ${{ success() && inputs.testar != true && inputs.stats != true }}
         run: |
           git config user.name "Afiliado Bot"
           git config user.email "bot@users.noreply.github.com"
           git add produtos.json historico.json
           if git diff --staged --quiet; then
-            echo "Sem alterações para commitar."
+            echo "Sem alteracoes para commitar."
           else
             git commit -m "Minerados: $(date -u '+%d/%m/%Y %H:%M UTC')"
             git push
           fi
-      - name: Minerar oportunidades Shopee
-        run: python src/minerador.py
-        env:
-          SHOPEE_APP_ID: ${{ secrets.SHOPEE_APP_ID }}
-          SHOPEE_APP_SECRET: ${{ secrets.SHOPEE_APP_SECRET }}
