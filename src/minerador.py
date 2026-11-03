@@ -24,20 +24,26 @@ APP_ID = os.environ.get("SHOPEE_APP_ID", "").strip()
 SECRET = os.environ.get("SHOPEE_APP_SECRET", "").strip()
 
 KEYWORDS_CASA = [
-    "organizador cozinha",
-    "aspirador portátil",
-    "passadeira a vapor",
-    "kit facas cozinha",
-    "varal de chão",
-    "tapete sala",
-    "jogo de lençol",
-    "panela de pressão elétrica",
-    "impermeabilizante spray",
-    "percarbonato",
+    # cozinha
+    "organizador cozinha", "kit facas cozinha", "panela de pressão elétrica",
+    "air fryer", "liquidificador", "batedeira", "jogo de panelas",
+    "potes herméticos", "escorredor de louça", "torneira cozinha",
+    # limpeza
+    "aspirador portátil", "robô aspirador", "passadeira a vapor",
+    "impermeabilizante spray", "percarbonato", "ferro de passar roupa",
+    "mop giratório",
+    # organização
+    "varal de chão", "organizador geladeira", "cabideiro", "sapateira",
+    "prateleira organizadora", "cesto organizador",
+    # cama e quarto
+    "jogo de lençol", "colchão", "travesseiro", "cortina blackout",
+    # sala, banheiro e ferramentas
+    "tapete sala", "rack para tv", "luminária led",
+    "chuveiro elétrico", "kit ferramentas", "escada doméstica",
 ]
 
 MIN_COMISSAO = 6.0
-MIN_VENDAS = 250
+MIN_VENDAS = 100
 MIN_RATING = 4.4
 QTD_DEFAULT = 5
 HIST = "historico.json"
@@ -258,7 +264,7 @@ def main():
     candidatos = {}
     for k in kws:
         total_k = 0
-        for pagina in (1, 2):
+        for pagina in (1, 2, 3):
             try:
                 ns = buscar(k, page=pagina, limit=50)
             except RuntimeError as e:
