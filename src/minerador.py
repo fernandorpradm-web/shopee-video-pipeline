@@ -1,13 +1,18 @@
 #!/usr/bin/env python3
 """
-Minerador Shopee Affiliate (GraphQL) — nicho Casa & Construção.
+Minerador Shopee Affiliate (GraphQL) — multi-nicho.
+
+Nichos ativos por padrao: casa + beleza (60 keywords).
+Pet disponivel via --nicho pet.
 
 Uso:
-  python src/minerador.py --testar          # valida credencial, busca e link
-  python src/minerador.py --stats           # calibra cortes + diagnostico (nao grava)
-  python src/minerador.py --seco            # mostra o JSON, nao grava
-  python src/minerador.py --qtd 5           # grava produtos.json
-  python src/minerador.py --nicho "tapete"  # keyword unica
+  python src/minerador.py --testar
+  python src/minerador.py --stats
+  python src/minerador.py --seco
+  python src/minerador.py --qtd 3
+  python src/minerador.py --nicho pet
+  python src/minerador.py --nicho todos
+  python src/minerador.py --keyword "tapete sala"
 """
 
 import argparse
@@ -25,40 +30,49 @@ APP_ID = os.environ.get("SHOPEE_APP_ID", "").strip()
 SECRET = os.environ.get("SHOPEE_APP_SECRET", "").strip()
 
 # ---------------------------------------------------------------------------
-# CATALOGO DE BUSCA — 30 keywords, todas dentro de Casa & Construcao
+# KEYWORDS POR NICHO
 # ---------------------------------------------------------------------------
-KEYWORDS_CASA = [
-    "organizador cozinha",
-    "kit facas cozinha",
-    "panela de pressão elétrica",
-    "air fryer",
-    "liquidificador",
-    "batedeira",
-    "jogo de panelas",
-    "potes herméticos",
-    "escorredor de louça",
-    "torneira cozinha",
-    "aspirador portátil",
-    "robô aspirador",
-    "passadeira a vapor",
-    "impermeabilizante spray",
-    "percarbonato",
-    "ferro de passar roupa",
-    "mop giratório",
-    "varal de chão",
-    "organizador geladeira",
-    "cabideiro",
-    "sapateira",
-    "prateleira organizadora",
-    "cesto organizador",
-    "jogo de lençol",
-    "colchão",
-    "travesseiro",
-    "cortina blackout",
-    "tapete sala",
-    "rack para tv",
-    "kit ferramentas",
-]
+NICHOS = {
+    "casa": [
+        "organizador cozinha", "kit facas cozinha", "panela de pressão elétrica",
+        "air fryer", "liquidificador", "batedeira", "jogo de panelas",
+        "potes herméticos", "escorredor de louça", "torneira cozinha",
+        "aspirador portátil", "robô aspirador", "passadeira a vapor",
+        "impermeabilizante spray", "percarbonato", "ferro de passar roupa",
+        "mop giratório", "varal de chão", "organizador geladeira",
+        "cabideiro", "sapateira", "prateleira organizadora",
+        "cesto organizador", "jogo de lençol", "colchão", "travesseiro",
+        "cortina blackout", "tapete sala", "rack para tv", "kit ferramentas",
+    ],
+    "beleza": [
+        "creme anti-idade facial", "sérum vitamina c", "protetor solar facial",
+        "creme para rugas", "hidratante corporal", "óleo capilar",
+        "máscara capilar", "escova secadora", "prancha alisadora",
+        "secador de cabelo", "kit escova alisadora", "base facial",
+        "corretivo de olheiras", "batom matte", "paleta de sombras",
+        "rímel alongador", "esmalte gel", "kit unhas de gel",
+        "creme para mãos", "creme para pés", "esfoliante facial",
+        "ácido hialurônico", "colágeno em pó", "biotina cabelo unhas",
+        "óleo de argan", "modelador de cachos", "chapinha profissional",
+        "kit pincéis maquiagem", "depilador elétrico", "massageador facial",
+    ],
+    "pet": [
+        "ração para cães", "ração para gatos", "areia para gato",
+        "arranhador para gato", "caminha para cachorro", "coleira antipulgas",
+        "brinquedo para cachorro", "comedouro automático", "bebedouro para gatos",
+        "tapete higiênico", "escova para pets", "cortador de unha pet",
+        "shampoo para cachorro", "peitoral para cães", "caixa de transporte pet",
+        "cama para gato", "arranhador torre", "kit brinquedos gato",
+        "suplemento para cães", "petisco natural para cães",
+        "escova removedora de pelos", "aspirador de pelos pet",
+        "fonte de água para gatos", "mochila transportar pet",
+        "cama iglu para gato", "comedouro lento", "tapete de alimentação pet",
+        "antipulgas spray", "vermífugo para cães", "kit higiene para gatos",
+    ],
+}
+
+# Nichos minerados quando nenhum --nicho e informado
+NICHOS_ATIVOS = ["casa", "beleza"]
 
 # ---------------------------------------------------------------------------
 # CORTES
@@ -69,8 +83,11 @@ MIN_RATING = 4.4
 
 PAGINAS_POR_KEYWORD = 3
 LIMITE_POR_PAGINA = 50
-QTD_DEFAULT = 5
-DIAS_HISTORICO = 30          # produto pode voltar depois de 30 dias, com angulo novo
+PAUSA_ENTRE_KEYWORDS = 0.4
+
+QTD_DEFAULT = 3
+DIAS_HISTORICO_MAX = 30
+MARGEM_CICLO = 0.8
 
 HIST = "historico.json"
 SAIDA = "produtos.json"
@@ -184,7 +201,7 @@ def shortlink(origin):
 
 
 # ---------------------------------------------------------------------------
-# SCORE E ROTEIRO
+# SCORE
 # ---------------------------------------------------------------------------
 def score(p):
     try:
@@ -198,32 +215,54 @@ def score(p):
     return round(c * 3 + min(v, 20000) / 1000 + (r - 4.5) * 10, 2)
 
 
+# ---------------------------------------------------------------------------
+# ROTEIRO COM ROTACAO POR DATA
+# ---------------------------------------------------------------------------
 GANCHOS = [
     "Todo mundo tem esse problema em casa — e isso resolve em segundos.",
-    "Se voce ja perdeu tempo tentando resolver do jeito dificil, olha isso.",
-    "Nao precisa ser pratico pra usar. Olha como funciona.",
-    "Eu testei e nao esperava esse resultado.",
+    "Olha o antes e depois. Nao precisa fazer forca.",
     "Isso voce compra uma vez e usa todo dia.",
+    "Eu testei e nao esperava esse resultado.",
+    "Se voce ja perdeu tempo tentando do jeito dificil, olha isso.",
+    "Nao precisa ser pratico pra usar. Olha como funciona.",
+    "Repara como resolve em um movimento so.",
+    "Isso caberia na sua casa hoje mesmo.",
+    "Quem tem esse problema vai entender na hora.",
+    "Simples, barato e resolve o que ninguem resolve.",
 ]
 CTAS = [
     "Toque no card e veja o preco.",
     "Toca no card antes que acabe o estoque.",
     "Confere o preco no card.",
+    "O link esta no card.",
+    "Toca no card e aproveita.",
+    "Preco no card, enquanto durar.",
 ]
 
 
-def roteiro(p):
-    key = int(p.get("itemId") or 0)
-    g = GANCHOS[key % len(GANCHOS)]
-    c = CTAS[key % len(CTAS)]
+def roteiro(p, janela):
+    """Gancho rotaciona por data: produto que volta em N dias sai com texto novo."""
+    rotacao = date.today().toordinal() // max(janela, 1)
+    base = int(p.get("itemId") or 0)
+    key = base + rotacao * 7
+    gancho = GANCHOS[key % len(GANCHOS)]
+    cta = CTAS[(key // 3) % len(CTAS)]
     preco = p.get("priceMin")
     p_txt = " por R$ %s" % preco if preco else ""
-    return "%s %s%s. %s" % (g, p.get("productName", ""), p_txt, c)
+    texto = "%s %s%s. %s" % (gancho, p.get("productName", ""), p_txt, cta)
+    return texto, key % len(GANCHOS)
 
 
 # ---------------------------------------------------------------------------
-# HISTORICO COM PRAZO DE VALIDADE
+# HISTORICO COM JANELA DINAMICA
 # ---------------------------------------------------------------------------
+def _data(txt):
+    try:
+        return date.fromisoformat(str(txt)[:10])
+    except (ValueError, TypeError):
+        return date(1970, 1, 1)
+
+
 def ler_historico():
     """Retorna {item_id: 'YYYY-MM-DD'}. Aceita o formato antigo (lista)."""
     if not os.path.exists(HIST):
@@ -246,37 +285,35 @@ def ler_historico():
     return {}
 
 
-def _data(txt):
-    try:
-        return date.fromisoformat(str(txt)[:10])
-    except (ValueError, TypeError):
-        return date(1970, 1, 1)
+def janela_ideal(pool, qtd):
+    """Dias que o ciclo sustenta com 20% de margem. Nunca trava o pipeline."""
+    if pool <= 0 or qtd <= 0:
+        return 7
+    return max(7, int(pool / qtd * MARGEM_CICLO))
 
 
-def historico_ativos(hist):
-    """IDs bloqueados: usados dentro da janela de DIAS_HISTORICO."""
-    limite = date.today() - timedelta(days=DIAS_HISTORICO)
-    return set([iid for iid, dt in hist.items() if _data(dt) > limite])
+def historico_ativos(hist, janela):
+    limite = date.today() - timedelta(days=janela)
+    return set(iid for iid, dt in hist.items() if _data(dt) > limite)
 
 
-def salvar_historico(hist, novos_ids):
+def salvar_historico(hist, novos_ids, janela):
     hoje = date.today().isoformat()
-    limite = date.today() - timedelta(days=DIAS_HISTORICO)
-    registro = {}
-    for iid, dt in hist.items():
-        if _data(dt) > limite:
-            registro[iid] = str(dt)
+    limite = date.today() - timedelta(days=janela)
+    registro = dict((iid, str(dt)) for iid, dt in hist.items()
+                    if _data(dt) > limite)
     for iid in novos_ids:
         registro[str(iid)] = hoje
 
-    payload = {"version": 2, "atualizado": hoje, "produtos": registro}
+    payload = {"version": 2, "atualizado": hoje, "janela_dias": janela,
+               "produtos": registro}
     with open(HIST, "w", encoding="utf-8") as f:
         json.dump(payload, f, ensure_ascii=False, indent=2)
     return registro
 
 
 # ---------------------------------------------------------------------------
-# DIAGNOSTICO E CALIBRACAO
+# DIAGNOSTICO
 # ---------------------------------------------------------------------------
 def _grade(candidatos, nota_min, vazio_aprova, rotulo):
     vendas_opts = [100, 250, 500, 1000, 2000]
@@ -309,64 +346,87 @@ def _grade(candidatos, nota_min, vazio_aprova, rotulo):
 
 def stats(candidatos):
     total = len(candidatos)
-    sem_nota = 0
-    sem_comissao = 0
+    sem_nota = sum(1 for p in candidatos.values() if not p.get("ratingStar"))
+    sem_com = sum(1 for p in candidatos.values() if not p.get("commission"))
+
+    por_nicho = {}
     for p in candidatos.values():
-        try:
-            if not p.get("ratingStar"):
-                sem_nota += 1
-            if not p.get("commission"):
-                sem_comissao += 1
-        except (TypeError, ValueError):
-            pass
+        n = p.get("_nicho", "?")
+        por_nicho[n] = por_nicho.get(n, 0) + 1
 
     print("")
     print("=" * 62)
     print("DIAGNOSTICO DO CATALOGO")
     print("=" * 62)
-    print("  candidatos unicos:        %d" % total)
-    print("  sem ratingStar:           %d (%.1f%% do total)"
+    print("  candidatos unicos:   %d" % total)
+    print("  por nicho:           %s" % por_nicho)
+    print("  sem ratingStar:      %d (%.1f%%)"
           % (sem_nota, 100.0 * sem_nota / max(total, 1)))
-    print("  sem commission:           %d (%.1f%% do total)"
-          % (sem_comissao, 100.0 * sem_comissao / max(total, 1)))
-    print("")
+    print("  sem commission:      %d (%.1f%%)"
+          % (sem_com, 100.0 * sem_com / max(total, 1)))
     if sem_nota > 0:
-        print("  ATENCAO: produtos sem nota estao sendo reprovados no corte atual.")
-        print("  Compare as duas grades abaixo e decida se vale trata-los como neutros.")
-    else:
-        print("  Nenhum produto sem nota — o corte de rating nao esta escondendo nada.")
+        print("")
+        print("  ATENCAO: produtos sem nota estao sendo reprovados.")
+        print("  Compare a GRADE A e a GRADE B abaixo.")
 
     _grade(candidatos, MIN_RATING, False,
-           "GRADE A — nota minima %.1f (produto sem nota REPROVA)" % MIN_RATING)
+           "GRADE A — nota %.1f (sem nota REPROVA)" % MIN_RATING)
     _grade(candidatos, MIN_RATING, True,
-           "GRADE B — nota minima %.1f (produto sem nota = neutro, APROVA)" % MIN_RATING)
+           "GRADE B — nota %.1f (sem nota = neutro, APROVA)" % MIN_RATING)
 
     print("")
-    print("Escolha a celula entre 5 e 15 produtos na grade que voce usar.")
-    print("Abaixo de 5 trava o pipeline. Acima de 20 traz produto sem prova social.")
+    print("Escolha a celula entre 5 e 15 por nicho ativo.")
+    print("Com 2 nichos ativos, 10 a 30 no total mantem o ciclo saudavel.")
 
 
 # ---------------------------------------------------------------------------
 # MAIN
 # ---------------------------------------------------------------------------
+def _resolver_keywords(a):
+    if a.keyword:
+        return [a.keyword], "keyword unica"
+    if a.nicho == "todos":
+        kws = []
+        for nome in NICHOS:
+            kws.extend(NICHOS[nome])
+        return kws, "todos os nichos"
+    if a.nicho in NICHOS:
+        return NICHOS[a.nicho], "nicho %s" % a.nicho
+    kws = []
+    for nome in NICHOS_ATIVOS:
+        kws.extend(NICHOS[nome])
+    return kws, "nichos ativos: %s" % ", ".join(NICHOS_ATIVOS)
+
+
+def _nicho_de(keyword, a):
+    if a.keyword:
+        return "avulso"
+    for nome, lista in NICHOS.items():
+        if keyword in lista:
+            return nome
+    return "?"
+
+
 def main():
     ap = argparse.ArgumentParser(description="Minerador Shopee Affiliate")
     ap.add_argument("--testar", action="store_true")
     ap.add_argument("--seco", action="store_true")
     ap.add_argument("--stats", action="store_true")
     ap.add_argument("--qtd", type=int, default=QTD_DEFAULT)
-    ap.add_argument("--nicho", default="")
+    ap.add_argument("--nicho", default="",
+                    choices=["", "casa", "beleza", "pet", "todos"])
+    ap.add_argument("--keyword", default="")
     a = ap.parse_args()
 
     if not APP_ID or not SECRET:
         sys.exit("Faltam SHOPEE_APP_ID / SHOPEE_APP_SECRET no ambiente.")
 
-    kw = a.nicho or KEYWORDS_CASA[0]
+    kws, rotulo = _resolver_keywords(a)
 
     # ---------------- modo teste ----------------
     if a.testar:
-        print("1) Auth + busca: '%s'" % kw)
-        nodes = buscar(kw, limit=5)
+        print("1) Auth + busca: '%s'" % kws[0])
+        nodes = buscar(kws[0], limit=5)
         if not nodes:
             sys.exit("Busca OK, mas zero resultados. Reveja a keyword.")
         print("   OK — %d ofertas" % len(nodes))
@@ -386,12 +446,12 @@ def main():
 
     # ---------------- mineracao ----------------
     qtd = max(3, min(a.qtd, 5))
-    kws = [a.nicho] if a.nicho else KEYWORDS_CASA
-    print("Minerando %d keywords x %d paginas" % (len(kws), PAGINAS_POR_KEYWORD))
+    print("Minerando %d keywords x %d paginas (%s)"
+          % (len(kws), PAGINAS_POR_KEYWORD, rotulo))
 
     candidatos = {}
     for k in kws:
-        acumulado_antes = len(candidatos)
+        antes = len(candidatos)
         for pagina in range(1, PAGINAS_POR_KEYWORD + 1):
             try:
                 ns = buscar(k, page=pagina)
@@ -401,10 +461,12 @@ def main():
             if not ns:
                 break
             for n in ns:
+                n["_nicho"] = _nicho_de(k, a)
                 candidatos[str(n.get("itemId"))] = n
             if len(ns) < LIMITE_POR_PAGINA:
                 break
-        print("  '%s': +%d" % (k, len(candidatos) - acumulado_antes))
+        print("  '%s': +%d" % (k, len(candidatos) - antes))
+        time.sleep(PAUSA_ENTRE_KEYWORDS)
 
     if not candidatos:
         sys.exit("Nenhum produto retornado. Verifique credencial e keywords.")
@@ -416,16 +478,10 @@ def main():
         stats(candidatos)
         return
 
-    # ---------------- filtro ----------------
-    hist = ler_historico()
-    bloqueados = historico_ativos(hist)
-    bons = []
-    barrados = {"comissao": 0, "vendas": 0, "nota": 0, "repetido": 0}
-
+    # 1) elegibilidade sem historico
+    elegiveis = []
+    barrados = {"comissao": 0, "vendas": 0, "nota": 0}
     for iid, p in candidatos.items():
-        if iid in bloqueados:
-            barrados["repetido"] += 1
-            continue
         s = score(p)
         if s <= 0:
             try:
@@ -439,21 +495,30 @@ def main():
                 barrados["comissao"] += 1
             continue
         p["_score"] = s
-        bons.append(p)
+        elegiveis.append(p)
 
-    bons.sort(key=lambda x: x["_score"], reverse=True)
-    escolhidos = bons[:qtd]
+    # 2) janela calculada a partir do pool real
+    janela = min(DIAS_HISTORICO_MAX, janela_ideal(len(elegiveis), qtd))
 
-    print("Historico: %d ativos de %d registrados (validade %d dias)"
-          % (len(bloqueados), len(hist), DIAS_HISTORICO))
-    print("Filtro: %d candidatos | %s" % (len(candidatos), dict(barrados)))
-    print("Elegiveis apos filtro: %d | escolhidos: %d" % (len(bons), len(escolhidos)))
+    # 3) historico com a janela calculada
+    hist = ler_historico()
+    bloqueados = historico_ativos(hist, janela)
+    livres = [p for p in elegiveis if str(p.get("itemId")) not in bloqueados]
+
+    livres.sort(key=lambda x: x["_score"], reverse=True)
+    escolhidos = livres[:qtd]
+
+    print("Filtro: %d candidatos | %s" % (len(candidatos), barrados))
+    print("Elegiveis: %d | janela: %d dias | bloqueados: %d | livres: %d"
+          % (len(elegiveis), janela, len(bloqueados), len(livres)))
+    if len(livres) < qtd:
+        print("AVISO: pool livre menor que a quantidade pedida (%d)." % qtd)
 
     if not escolhidos:
-        sys.exit("Nenhum produto passou. Catálogo sem oferta boa hoje — "
-                 "rode --stats para recalibrar.")
+        sys.exit("Nenhum produto livre. Catálogo esgotado — rode --stats "
+                 "para recalibrar ou amplie as keywords.")
 
-    # ---------------- saida ----------------
+    # 4) saida
     produtos = []
     for p in escolhidos:
         origem = p.get("productLink") or p.get("offerLink")
@@ -464,9 +529,8 @@ def main():
             print("  shortlink falhou (%s); usando offerLink" % e)
         link_final = link or p.get("offerLink") or origem or ""
         titulo = p.get("productName", "")
-        texto = roteiro(p)
+        texto, gancho_id = roteiro(p, janela)
 
-        # Chaves duplicadas de proposito: qualquer variante de main.py encontra a sua.
         produtos.append({
             "id": str(p.get("itemId")),
             "titulo": titulo,
@@ -476,7 +540,9 @@ def main():
             "texto": texto,
             "link": link_final,
             "url": link_final,
-            "hashtags": "#casa #construção #shopee #oferta",
+            "hashtags": "#casa #beleza #shopee #oferta",
+            "nicho": p.get("_nicho", "?"),
+            "gancho_id": gancho_id,
             "preco": p.get("priceMin"),
             "price": p.get("priceMin"),
             "comissao_reais": p.get("commission"),
@@ -491,13 +557,15 @@ def main():
 
     with open(SAIDA, "w", encoding="utf-8") as f:
         json.dump(produtos, f, ensure_ascii=False, indent=2)
-    salvar_historico(hist, [x["id"] for x in produtos])
+    salvar_historico(hist, [x["id"] for x in produtos], janela)
 
     print("")
-    print("%d produtos em %s" % (len(produtos), SAIDA))
+    print("%d produtos em %s (janela %d dias)"
+          % (len(produtos), SAIDA, janela))
     for x in produtos:
-        print("  · %s | R$ %s | score %s"
-              % (x["titulo"][:55], x["comissao_reais"], x["score"]))
+        print("  · [%s] %s | R$ %s | gancho %d"
+              % (x["nicho"], x["titulo"][:48],
+                 x["comissao_reais"], x["gancho_id"]))
 
 
 if __name__ == "__main__":
