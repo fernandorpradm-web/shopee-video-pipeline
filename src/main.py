@@ -44,8 +44,9 @@ def resolver_imagem(produto):
     if ref and os.path.exists(ref):
         return ref
     candidatos = glob.glob(os.path.join("imagens", f"{produto['id']}.*"))
-    if candidatos:
-        return candidatos[0]
+    if a.stats:
+        stats(candidatos)
+        return
     raise FileNotFoundError(
         f"Imagem não encontrada para '{produto['id']}'. "
         f"Envie a foto pro bot do Telegram com legenda '{produto['id']}'."
