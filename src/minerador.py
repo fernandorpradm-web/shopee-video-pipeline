@@ -157,11 +157,34 @@ def ler_historico() -> list:
     except (json.JSONDecodeError, OSError):
         return []
 
+def stats(candidatos: dict) -> None:
+    """Grade de simulação: quantos produtos passariam por cada combinação de cortes."""
+    vos = [100, 250, 500, 1000, 2000]
+    coms = [3, 5, 6, 8, 10]
+    print(f"\nSimulacao de cortes — {len(candidatos)} candidatos")
+    print("vendas \\ comissao".ljust(20) + "".join(f"{c:>7}" for c in coms))
+    for v in vos:
+        linha = f"{v:>18}"
+        for c in coms:
+            n = 0
+            for p in candidatos.values():
+                try:
+                    if (float(p.get("commission") or 0) >= c
+                            and int(p.get("sales") or 0) >= v
+                            and float(p.get("ratingStar") or 0) >= 4.4):
+                        n += 1
+                except (TypeError, ValueError):
+                    pass
+            linha += f"{n:>7}"
+        print(linha)
+    print("\nEscolha a celula entre 5 e 15 produtos.")
+
 
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--testar", action="store_true")
     ap.add_argument("--seco", action="store_true")
+    ap.add_argument("--stats", action="store_true", help="grade de calibração de cortes")
     ap.add_argument("--qtd", type=int, default=QTD_DEFAULT)
     ap.add_argument("--nicho", default="")
     a = ap.parse_args()
@@ -235,6 +258,9 @@ def main() -> None:
     bons.sort(key=lambda x: x["_score"], reverse=True)
     escolhidos = bons[:qtd]
 
+    if a.stats:
+        stats(candidatos)
+        return
     print(f"\nFiltro: {len(candidatos)} candidatos | {dict(barrados)}")
 
     if not escolhidos:
