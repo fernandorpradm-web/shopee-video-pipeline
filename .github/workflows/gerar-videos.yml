@@ -1,53 +1,95 @@
-name: Gerar videos Shopee
+name: Pipeline Diário Afiliado
 
 on:
   schedule:
-    - cron: "0 10 * * *"   # 10:00 UTC = 07:00 Brasília, todos os dias
-  workflow_dispatch: {}     # botão de teste manual
+    - cron: '0 10 * * *'        # 07:00 horário de Brasília (UTC-3)
+  workflow_dispatch:
+    inputs:
+      qtd:
+        description: 'Quantidade de vídeos (3 a 5)'
+        required: false
+        default: '5'
+      testar:
+        description: 'Só validar credencial da Shopee (não gera vídeo)'
+        type: boolean
+        default: false
 
 permissions:
-  contents: write           # necessário para o commit das imagens sincronizadas
+  contents: write               # necessário para o push do histórico
+
+concurrency:
+  group: pipeline-afiliado
+  cancel-in-progress: false     # evita duas execuções disputando o mesmo commit
 
 jobs:
-  gerar:
+  pipeline:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
-    steps:
-      - uses: actions/checkout@v4
+    timeout-minutes: 45
 
-      - uses: actions/setup-python@v5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
         with:
-          python-version: "3.11"
+          fetch-depth: 0
+
+      - name: Configurar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
 
       - name: Instalar ffmpeg
-        run: sudo apt-get update -qq && sudo apt-get install -y ffmpeg && ffmpeg -version | head -1
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
 
       - name: Instalar dependências
         run: pip install -r requirements.txt
 
-      - name: Sincronizar imagens do Telegram
+      # ---------- MODO TESTE: só valida a Shopee ----------
+      - name: Testar credencial Shopee
+        if: ${{ inputs.testar == true }}
+        run: python src/minerador.py --testar
+        env:
+          SHOPEE_APP_ID: ${{ secrets.SHOPEE_APP_ID }}
+          SHOPEE_APP_SECRET: ${{ secrets.SHOPEE_APP_SECRET }}
+
+      # ---------- PIPELINE DIÁRIO ----------
+      - name: 1. Minerar oportunidades
+        if: ${{ inputs.testar != true }}
+        run: python src/minerador.py --qtd ${{ inputs.qtd || '5' }}
+        env:
+          SHOPEE_APP_ID: ${{ secrets.SHOPEE_APP_ID }}
+          SHOPEE_APP_SECRET: ${{ secrets.SHOPEE_APP_SECRET }}
+
+      - name: 2. Sincronizar imagens do Telegram
+        if: ${{ inputs.testar != true }}
         run: python src/sync_imagens.py
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
 
-      - name: Salvar imagens no repositório
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          if [ -d imagens ] && [ -n "$(ls -A imagens 2>/dev/null)" ]; then
-            git add imagens
-            if ! git diff --cached --quiet; then
-              git commit -m "Imagens sincronizadas do Telegram"
-              git push
-            fi
-          fi
+      - name: 3. Gerar vídeos
+        if: ${{ inputs.testar != true }}
+        run: python src/main.py --limite 5
 
-      - name: Gerar e enviar vídeos
-        run: python src/main.py
+      - name: 4. Enviar ao Telegram
+        if: ${{ inputs.testar != true }}
+        run: python src/main.py --enviar
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-          
+
+      - name: 5. Commitar produtos e histórico
+        if: ${{ success() && inputs.testar != true }}
+        run: |
+          git config user.name "Afiliado Bot"
+          git config user.email "bot@users.noreply.github.com"
+          git add produtos.json historico.json
+          if git diff --staged --quiet; then
+            echo "Sem alterações para commitar."
+          else
+            git commit -m "Minerados: $(date -u '+%d/%m/%Y %H:%M UTC')"
+            git push
+          fi
       - name: Minerar oportunidades Shopee
         run: python src/minerador.py
         env:
