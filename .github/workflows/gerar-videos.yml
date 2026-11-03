@@ -8,7 +8,7 @@ on:
       qtd:
         description: 'Quantidade de vídeos (3 a 5)'
         required: false
-        default: '5'
+        default: '3'
       testar:
         description: 'Só validar credencial da Shopee'
         type: boolean
