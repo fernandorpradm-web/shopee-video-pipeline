@@ -191,16 +191,21 @@ def main() -> None:
     qtd = max(3, min(a.qtd, 5))
     kws = [a.nicho] if a.nicho else KEYWORDS_CASA
 
-    candidatos = {}
-    for k in kws:
-        try:
-            ns = buscar(k)
-        except Exception as e:
-            print(f"  '{k}': {e}")
-            continue
-        for n in ns:
-            candidatos[str(n.get("itemId"))] = n
-        print(f"  '{k}': {len(ns)}")
+     candidatos = {}
+     for k in kws:
+        for pagina in (1, 2):
+            try:
+                ns = buscar(k, page=pagina, limit=50)
+            except Exception as e:
+                print(f"  '{k}' p{pagina}: {e}")
+                break
+            if not ns:
+                break
+            for n in ns:
+                candidatos[str(n.get("itemId"))] = n
+            if len(ns) < 50:
+                break
+        print(f"  '{k}': {len(candidatos)} acumulados")
 
     if not candidatos:
         sys.exit("Nenhum produto retornado. Verifique credencial e keywords.")
