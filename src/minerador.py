@@ -3,14 +3,13 @@
 Minerador Shopee Affiliate (GraphQL) — multi-nicho.
 
 Nichos ativos por padrao: casa + beleza (60 keywords).
-Pet disponivel via --nicho pet.
+Pet disponivel via --nicho pet ou --nicho todos (90 keywords).
 
 Uso:
   python src/minerador.py --testar
   python src/minerador.py --stats
   python src/minerador.py --seco
   python src/minerador.py --qtd 3
-  python src/minerador.py --nicho pet
   python src/minerador.py --nicho todos
   python src/minerador.py --keyword "tapete sala"
 """
@@ -71,7 +70,6 @@ NICHOS = {
     ],
 }
 
-# Nichos minerados quando nenhum --nicho e informado
 NICHOS_ATIVOS = ["casa", "beleza"]
 
 # ---------------------------------------------------------------------------
@@ -80,6 +78,9 @@ NICHOS_ATIVOS = ["casa", "beleza"]
 MIN_COMISSAO = 6.0
 MIN_VENDAS = 100
 MIN_RATING = 4.4
+
+MIN_TICKET = 25.0      # abaixo disso a comissao nao paga o esforco
+MAX_TICKET = 200.0     # 0 desativa. Faixa dos campeoes historicos: R$ 30 a 200
 
 PAGINAS_POR_KEYWORD = 3
 LIMITE_POR_PAGINA = 50
@@ -201,56 +202,115 @@ def shortlink(origin):
 
 
 # ---------------------------------------------------------------------------
-# SCORE
+# TEXTO PARA O TTS
 # ---------------------------------------------------------------------------
-def score(p):
+LIXO_TITULO = {
+    "premium", "profissional", "multiuso", "moderna", "moderno", "decoracao",
+    "decoração", "livros", "banheiro", "cozinha", "sala", "bivolt", "original",
+    "novo", "nova", "importado", "com", "de", "da", "do", "das", "dos",
+    "para", "pra", "e", "em", "a", "o", "os", "as", "por", "aco", "aço",
+    "inox", "f", "unidade", "un", "pcs", "kit",
+}
+
+
+def falar_preco(valor):
+    """349.9 -> '349 reais e 90 centavos'. O TTS le corretamente."""
     try:
-        c = float(p.get("commission") or 0)
-        v = int(p.get("sales") or 0)
-        r = float(p.get("ratingStar") or 0)
+        v = float(valor)
     except (TypeError, ValueError):
-        return 0.0
-    if c < MIN_COMISSAO or v < MIN_VENDAS or r < MIN_RATING:
-        return 0.0
-    return round(c * 3 + min(v, 20000) / 1000 + (r - 4.5) * 10, 2)
+        return ""
+    if v <= 0:
+        return ""
+    reais = int(v)
+    cents = int(round((v - reais) * 100))
+    if cents == 0:
+        return "%d reais" % reais
+    if cents < 10:
+        return "%d reais e 0%d centavos" % (reais, cents)
+    return "%d reais e %d centavos" % (reais, cents)
 
 
-# ---------------------------------------------------------------------------
-# ROTEIRO COM ROTACAO POR DATA
-# ---------------------------------------------------------------------------
+def nome_curto(titulo, limite=42):
+    """Reduz o titulo do marketplace a algo falavel em 2 segundos."""
+    palavras = []
+    for p in str(titulo).split():
+        limpo = p.strip(",.;:-–—()º°")
+        if not limpo:
+            continue
+        baixo = limpo.lower()
+        if baixo in LIXO_TITULO:
+            continue
+        if any(ch.isdigit() for ch in limpo) and len(limpo) > 4:
+            continue
+        if len(limpo) == 1:
+            continue
+        palavras.append(limpo)
+        if len(" ".join(palavras)) >= limite:
+            break
+
+    curto = " ".join(palavras).strip()
+    if len(curto) > limite:
+        curto = curto[:limite].rsplit(" ", 1)[0]
+    return curto or str(titulo)[:limite].strip()
+
+
 GANCHOS = [
     "Todo mundo tem esse problema em casa — e isso resolve em segundos.",
-    "Olha o antes e depois. Nao precisa fazer forca.",
-    "Isso voce compra uma vez e usa todo dia.",
-    "Eu testei e nao esperava esse resultado.",
-    "Se voce ja perdeu tempo tentando do jeito dificil, olha isso.",
-    "Nao precisa ser pratico pra usar. Olha como funciona.",
-    "Repara como resolve em um movimento so.",
+    "Olha o antes e depois. Não precisa fazer força.",
+    "Isso você compra uma vez e usa todo dia.",
+    "Eu testei e não esperava esse resultado.",
+    "Se você já perdeu tempo tentando do jeito difícil, olha isso.",
+    "Não precisa ser prático pra usar. Olha como funciona.",
+    "Repara como resolve em um movimento só.",
     "Isso caberia na sua casa hoje mesmo.",
     "Quem tem esse problema vai entender na hora.",
-    "Simples, barato e resolve o que ninguem resolve.",
+    "Simples, barato e resolve o que ninguém resolve.",
 ]
 CTAS = [
-    "Toque no card e veja o preco.",
+    "Toque no card e veja o preço.",
     "Toca no card antes que acabe o estoque.",
-    "Confere o preco no card.",
-    "O link esta no card.",
+    "Confere o preço no card.",
+    "O link está no card.",
     "Toca no card e aproveita.",
-    "Preco no card, enquanto durar.",
+    "Preço no card, enquanto durar.",
 ]
 
 
 def roteiro(p, janela):
-    """Gancho rotaciona por data: produto que volta em N dias sai com texto novo."""
+    """Gancho rotaciona por data: produto que volta depois da janela sai novo."""
     rotacao = date.today().toordinal() // max(janela, 1)
     base = int(p.get("itemId") or 0)
     key = base + rotacao * 7
     gancho = GANCHOS[key % len(GANCHOS)]
     cta = CTAS[(key // 3) % len(CTAS)]
-    preco = p.get("priceMin")
-    p_txt = " por R$ %s" % preco if preco else ""
-    texto = "%s %s%s. %s" % (gancho, p.get("productName", ""), p_txt, cta)
+    item = nome_curto(p.get("productName", ""))
+    preco = falar_preco(p.get("priceMin"))
+    p_txt = " por %s" % preco if preco else ""
+    texto = "%s %s%s. %s" % (gancho, item, p_txt, cta)
     return texto, key % len(GANCHOS)
+
+
+# ---------------------------------------------------------------------------
+# SCORE
+# ---------------------------------------------------------------------------
+def score(p):
+    """Comissao pesa 1.5x, vendas pesam forte. Teto de ticket aplicado."""
+    try:
+        c = float(p.get("commission") or 0)
+        v = int(p.get("sales") or 0)
+        r = float(p.get("ratingStar") or 0)
+        preco = float(p.get("priceMin") or 0)
+    except (TypeError, ValueError):
+        return 0.0
+
+    if c < MIN_COMISSAO or v < MIN_VENDAS or r < MIN_RATING:
+        return 0.0
+    if preco < MIN_TICKET:
+        return 0.0
+    if MAX_TICKET > 0 and preco > MAX_TICKET:
+        return 0.0
+
+    return round(c * 1.5 + min(v, 20000) / 200.0 + (r - 4.5) * 10, 2)
 
 
 # ---------------------------------------------------------------------------
@@ -344,6 +404,26 @@ def _grade(candidatos, nota_min, vazio_aprova, rotulo):
         print(linha)
 
 
+def _contar_elegiveis(candidatos, aplicar_teto):
+    n = 0
+    for p in candidatos.values():
+        try:
+            com = float(p.get("commission") or 0)
+            ven = int(p.get("sales") or 0)
+            nota = float(p.get("ratingStar") or 0)
+            preco = float(p.get("priceMin") or 0)
+        except (TypeError, ValueError):
+            continue
+        if com < MIN_COMISSAO or ven < MIN_VENDAS or nota < MIN_RATING:
+            continue
+        if preco < MIN_TICKET:
+            continue
+        if aplicar_teto and MAX_TICKET > 0 and preco > MAX_TICKET:
+            continue
+        n += 1
+    return n
+
+
 def stats(candidatos):
     total = len(candidatos)
     sem_nota = sum(1 for p in candidatos.values() if not p.get("ratingStar"))
@@ -354,16 +434,32 @@ def stats(candidatos):
         n = p.get("_nicho", "?")
         por_nicho[n] = por_nicho.get(n, 0) + 1
 
+    sem_teto = _contar_elegiveis(candidatos, False)
+    com_teto = _contar_elegiveis(candidatos, True)
+
     print("")
     print("=" * 62)
     print("DIAGNOSTICO DO CATALOGO")
     print("=" * 62)
-    print("  candidatos unicos:   %d" % total)
-    print("  por nicho:           %s" % por_nicho)
-    print("  sem ratingStar:      %d (%.1f%%)"
+    print("  candidatos unicos:    %d" % total)
+    print("  por nicho:            %s" % por_nicho)
+    print("  sem ratingStar:       %d (%.1f%%)"
           % (sem_nota, 100.0 * sem_nota / max(total, 1)))
-    print("  sem commission:      %d (%.1f%%)"
+    print("  sem commission:       %d (%.1f%%)"
           % (sem_com, 100.0 * sem_com / max(total, 1)))
+    print("")
+    print("  corte atual:          comissao >= R$ %.0f | vendas >= %d | nota >= %.1f"
+          % (MIN_COMISSAO, MIN_VENDAS, MIN_RATING))
+    print("  ticket:               R$ %.0f a R$ %.0f"
+          % (MIN_TICKET, MAX_TICKET if MAX_TICKET > 0 else 999999))
+    print("  elegiveis sem teto:   %d" % sem_teto)
+    print("  elegiveis com teto:   %d  (barrados por ticket: %d)"
+          % (com_teto, sem_teto - com_teto))
+    print("")
+    if com_teto > 0:
+        j = janela_ideal(com_teto, QTD_DEFAULT)
+        print("  janela calculada:     %d dias a %d videos/dia"
+              % (min(DIAS_HISTORICO_MAX, j), QTD_DEFAULT))
     if sem_nota > 0:
         print("")
         print("  ATENCAO: produtos sem nota estao sendo reprovados.")
@@ -375,8 +471,8 @@ def stats(candidatos):
            "GRADE B — nota %.1f (sem nota = neutro, APROVA)" % MIN_RATING)
 
     print("")
-    print("Escolha a celula entre 5 e 15 por nicho ativo.")
-    print("Com 2 nichos ativos, 10 a 30 no total mantem o ciclo saudavel.")
+    print("As grades NAO aplicam o teto de ticket. Use as linhas")
+    print("'elegiveis com teto' acima como referencia real do pool.")
 
 
 # ---------------------------------------------------------------------------
@@ -478,26 +574,31 @@ def main():
         stats(candidatos)
         return
 
-    # 1) elegibilidade sem historico
+    # 1) elegibilidade
     elegiveis = []
-    barrados = {"comissao": 0, "vendas": 0, "nota": 0}
+    barrados = {"comissao": 0, "vendas": 0, "nota": 0, "ticket": 0}
     for iid, p in candidatos.items():
         s = score(p)
         if s <= 0:
             try:
+                preco = float(p.get("priceMin") or 0)
                 if float(p.get("commission") or 0) < MIN_COMISSAO:
                     barrados["comissao"] += 1
                 elif int(p.get("sales") or 0) < MIN_VENDAS:
                     barrados["vendas"] += 1
-                else:
+                elif float(p.get("ratingStar") or 0) < MIN_RATING:
                     barrados["nota"] += 1
+                elif preco < MIN_TICKET or (MAX_TICKET > 0 and preco > MAX_TICKET):
+                    barrados["ticket"] += 1
+                else:
+                    barrados["comissao"] += 1
             except (TypeError, ValueError):
                 barrados["comissao"] += 1
             continue
         p["_score"] = s
         elegiveis.append(p)
 
-    # 2) janela calculada a partir do pool real
+    # 2) janela calculada do pool real
     janela = min(DIAS_HISTORICO_MAX, janela_ideal(len(elegiveis), qtd))
 
     # 3) historico com a janela calculada
@@ -515,7 +616,7 @@ def main():
         print("AVISO: pool livre menor que a quantidade pedida (%d)." % qtd)
 
     if not escolhidos:
-        sys.exit("Nenhum produto livre. Catálogo esgotado — rode --stats "
+        sys.exit("Nenhum produto livre. Catalogo esgotado — rode --stats "
                  "para recalibrar ou amplie as keywords.")
 
     # 4) saida
@@ -535,6 +636,7 @@ def main():
             "id": str(p.get("itemId")),
             "titulo": titulo,
             "title": titulo,
+            "texto_tela": nome_curto(titulo, 40),
             "script": texto,
             "narration": texto,
             "texto": texto,
@@ -564,8 +666,10 @@ def main():
           % (len(produtos), SAIDA, janela))
     for x in produtos:
         print("  · [%s] %s | R$ %s | gancho %d"
-              % (x["nicho"], x["titulo"][:48],
+              % (x["nicho"], x["titulo"][:44],
                  x["comissao_reais"], x["gancho_id"]))
+        print("    script: %s" % x["script"][:110])
+        print("    tela:   %s" % x["texto_tela"])
 
 
 if __name__ == "__main__":
