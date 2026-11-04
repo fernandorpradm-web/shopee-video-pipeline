@@ -14,7 +14,11 @@ on:
         type: boolean
         default: false
       stats:
-        description: 'Só calibrar cortes (grade de simulação)'
+        description: 'Só diagnosticar catálogo (grades de corte)'
+        type: boolean
+        default: false
+      seco:
+        description: 'Só inspecionar os escolhidos (não grava)'
         type: boolean
         default: false
 
@@ -42,10 +46,6 @@ jobs:
           python-version: '3.11'
           cache: 'pip'
 
-      - name: Instalar ffmpeg
-        if: ${{ inputs.testar != true && inputs.stats != true }}
-        run: sudo apt-get update && sudo apt-get install -y ffmpeg
-
       - name: Instalar dependências
         run: pip install -r requirements.txt
 
@@ -56,40 +56,40 @@ jobs:
           SHOPEE_APP_ID: ${{ secrets.SHOPEE_APP_ID }}
           SHOPEE_APP_SECRET: ${{ secrets.SHOPEE_APP_SECRET }}
 
-      - name: Calibrar cortes
+      - name: Calibrar catálogo
         if: ${{ inputs.stats == true }}
         run: python src/minerador.py --stats
         env:
           SHOPEE_APP_ID: ${{ secrets.SHOPEE_APP_ID }}
           SHOPEE_APP_SECRET: ${{ secrets.SHOPEE_APP_SECRET }}
 
+      - name: Inspecionar escolhidos
+        if: ${{ inputs.seco == true }}
+        run: python src/minerador.py --seco
+        env:
+          SHOPEE_APP_ID: ${{ secrets.SHOPEE_APP_ID }}
+          SHOPEE_APP_SECRET: ${{ secrets.SHOPEE_APP_SECRET }}
+
+      - name: Instalar ffmpeg
+        if: ${{ inputs.testar != true && inputs.stats != true && inputs.seco != true }}
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+
       - name: 1. Minerar oportunidades
-        if: ${{ inputs.testar != true && inputs.stats != true }}
-        run: python src/minerador.py --qtd ${{ inputs.qtd || '5' }}
+        if: ${{ inputs.testar != true && inputs.stats != true && inputs.seco != true }}
+        run: python src/minerador.py --qtd ${{ inputs.qtd || '3' }}
         env:
           SHOPEE_APP_ID: ${{ secrets.SHOPEE_APP_ID }}
           SHOPEE_APP_SECRET: ${{ secrets.SHOPEE_APP_SECRET }}
 
       - name: 2. Gerar e enviar vídeos
-        if: ${{ inputs.testar != true && inputs.stats != true }}
-        run: python src/main.py --limite 5
+        if: ${{ inputs.testar != true && inputs.stats != true && inputs.seco != true }}
+        run: python src/main.py --limite ${{ inputs.qtd || '3' }}
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
 
-      - name: 3. Gerar vídeos
-        if: ${{ inputs.testar != true && inputs.stats != true }}
-        run: python src/main.py --limite 5
-
-      - name: 4. Enviar ao Telegram
-        if: ${{ inputs.testar != true && inputs.stats != true }}
-        run: python src/main.py --enviar
-        env:
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-
-      - name: 5. Commitar produtos e histórico
-        if: ${{ success() && inputs.testar != true && inputs.stats != true }}
+      - name: 3. Commitar produtos e histórico
+        if: ${{ success() && inputs.testar != true && inputs.stats != true && inputs.seco != true }}
         run: |
           git config user.name "Afiliado Bot"
           git config user.email "bot@users.noreply.github.com"
