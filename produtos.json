@@ -1,59 +1,62 @@
-{
-  "voz": "pt-BR-FranciscaNeural",
-  "produtos": [
-    {
-      "id": "varal-3-andares",
-      "titulo": "Varal de Chão 3 Andares Dobrável Portátil",
-      "texto_tela": "VARAL 3 ANDARES\nDOBRÁVEL • PORTÁTIL\nPREÇO ESPECIAL ▼",
-      "script": "Sua roupa secando em 3 andares sem ocupar espaço? Vem ver! Varal de Chão 3 Andares: dobrável, portátil, cabe em qualquer cantinho. Monta em segundos, segura muita roupa e fecha pra guardar. Perfeito pra apartamento e varanda pequena. Preço especial aqui na Shopee. Toque no card e garanta o seu!",
-      "imagem": "imagens/varal-3-andares.jpg",
-      "link_afiliado": "https://shopee.com.br/product/325008325/21071530577",
-      "hashtags": "#shopee #achadinhoshopee #varal #organizacao #lavanderia #shopeevideo"
-    },
-    {
-      "id": "pote-porta-frios",
-      "titulo": "Pote Porta Frios Hermético Acrílico Branco",
-      "texto_tela": "GELADEIRA ORGANIZADA\nHERMÉTICO • EMPILHÁVEL\nAPROVEITE ▼",
-      "script": "Geladeira organizada em 1 minuto? Esse pote resolve! Pote Porta Frios Hermético em acrílico: mantém queijo, frios e sobremesas frescos por mais tempo. Transparente e empilhável, sua geladeira vira vitrine. O antes e depois que impressiona. Aproveite no card aqui embaixo!",
-      "imagem": "imagens/pote-porta-frios.jpg",
-      "link_afiliado": "https://shopee.com.br/product/408653169/21199561036",
-      "hashtags": "#shopee #achadinhoshopee #geladeiraorganizada #organizacao #cozinha #shopeevideo"
-    },
-    {
-      "id": "liquidificador-mondial",
-      "titulo": "Liquidificador Mondial Turbo Power 3 Velocidades",
-      "texto_tela": "LIQUIDIFICADOR MONDIAL\n3 VELOCIDADES • POTENTE\nTOQUE NO CARD ▼",
-      "script": "O liquidificador que tritura tudo, e tá barato demais! Liquidificador Mondial Turbo Power, 3 velocidades. Motor potente, copo resistente e o preço Mondial que você já conhece. Vitaminas, molhos e massas em segundos. Marca confiável com desconto. Toque no card e compre!",
-      "imagem": "imagens/liquidificador-mondial.jpg",
-      "link_afiliado": "https://shopee.com.br/product/489001115/12237278339",
-      "hashtags": "#shopee #achadinhoshopee #liquidificador #cozinha #eletroportatil #shopeevideo"
-    },
-    {
-      "id": "panela-eletrica-philco",
-      "titulo": "Panela de Pressão Elétrica Philco 4L 14 Funções",
-      "texto_tela": "PANELA ELÉTRICA PHILCO\n4L • 14 FUNÇÕES\nGARANTA O SEU ▼",
-      "script": "Feijão pronto em 20 minutos sem vigiar o fogão? Olha isso! Panela de Pressão Elétrica Philco, 4 litros, com 14 funções. Programa e esquece: feijão, carne, bolo e até iogurte. Desliga sozinha, mantém quente e tem segurança total. Investimento que paga em tempo economizado. Garanta no card!",
-      "imagem": "imagens/panela-eletrica-philco.jpg",
-      "link_afiliado": "https://shopee.com.br/product/811034337/23294299174",
-      "hashtags": "#shopee #achadinhoshopee #panelaeletrica #cozinha #praticidade #shopeevideo"
-    },
-    {
-      "id": "aspirador-gaabor",
-      "titulo": "Aspirador Portátil Gaabor 2 em 1 16000Pa",
-      "texto_tela": "ASPIRADOR 2 EM 1\nSEM FIO • 16000Pa\nFRETE GRÁTIS ▼",
-      "script": "Casa limpa sem cabo e sem esforço? Esse aqui! Aspirador Portátil Gaabor 2 em 1, com dezesseis mil pascais de sucção. Aspira o piso e vira portátil pra sofá e carro. Sem fio, leve, com força de aspirador grande. Limpeza prática com frete grátis. Toque no card!",
-      "imagem": "imagens/aspirador-gaabor.jpg",
-      "link_afiliado": "https://shopee.com.br/product/1541348350/19098205730",
-      "hashtags": "#shopee #achadinhoshopee #aspirador #limpezadecasa #praticidade #shopeevideo"
-    },
-    {
-      "id": "kit-pano-de-prato",
-      "titulo": "Kit Pano de Prato Estampado 10 Peças",
-      "texto_tela": "KIT 10 PANOS DE PRATO\nESTAMPADOS • RESISTENTES\nACHADINHO DO DIA ▼",
-      "script": "Dez panos de prato por menos que um? Achadinho do dia! Kit com 10 panos de prato estampados. Absorventes, resistentes e com estampas que renovam a cozinha inteira. Preço de impulso, estoque limitado. Aproveite no card aqui embaixo!",
-      "imagem": "imagens/kit-pano-de-prato.jpg",
-      "link_afiliado": "https://shopee.com.br/product/388739239/5786878341",
-      "hashtags": "#shopee #achadinhoshopee #panodeprato #cozinha #achadinhos #shopeevideo"
-    }
-  ]
-}
+[
+  {
+    "id": "23498464792",
+    "titulo": "Carrinho Organizador De Aço Multiuso 3 Prateleiras Premium Rodízio 360º Cozinha Sala Banheiro Livros Decoração Moderna",
+    "title": "Carrinho Organizador De Aço Multiuso 3 Prateleiras Premium Rodízio 360º Cozinha Sala Banheiro Livros Decoração Moderna",
+    "texto_tela": "Carrinho Organizador Prateleiras Rodízio",
+    "script": "Repara como resolve em um movimento só. Carrinho Organizador Prateleiras Rodízio por 137 reais e 99 centavos. Confere o preço no card.",
+    "narration": "Repara como resolve em um movimento só. Carrinho Organizador Prateleiras Rodízio por 137 reais e 99 centavos. Confere o preço no card.",
+    "texto": "Repara como resolve em um movimento só. Carrinho Organizador Prateleiras Rodízio por 137 reais e 99 centavos. Confere o preço no card.",
+    "link": "https://s.shopee.com.br/1W0UiYFdcL",
+    "url": "https://s.shopee.com.br/1W0UiYFdcL",
+    "hashtags": "#casa #beleza #shopee #oferta",
+    "nicho": "casa",
+    "gancho_id": 6,
+    "preco": "137.99",
+    "price": "137.99",
+    "comissao_reais": "60.7156",
+    "score": 94.67,
+    "imagem": "https://cf.shopee.com.br/file/sg-11134201-7rffd-m9hn0dh7ck0pdf",
+    "image": "https://cf.shopee.com.br/file/sg-11134201-7rffd-m9hn0dh7ck0pdf"
+  },
+  {
+    "id": "20175848083",
+    "titulo": "Spray Vedatudo 400ml Impermeabilizante Emborrachado Dryko",
+    "title": "Spray Vedatudo 400ml Impermeabilizante Emborrachado Dryko",
+    "texto_tela": "spray Vedatudo Impermeabilizante",
+    "script": "Isso caberia na sua casa hoje mesmo. spray Vedatudo Impermeabilizante por 36 reais e 49 centavos. Toca no card antes que acabe o estoque.",
+    "narration": "Isso caberia na sua casa hoje mesmo. spray Vedatudo Impermeabilizante por 36 reais e 49 centavos. Toca no card antes que acabe o estoque.",
+    "texto": "Isso caberia na sua casa hoje mesmo. spray Vedatudo Impermeabilizante por 36 reais e 49 centavos. Toca no card antes que acabe o estoque.",
+    "link": "https://s.shopee.com.br/AUvIFlEaEc",
+    "url": "https://s.shopee.com.br/AUvIFlEaEc",
+    "hashtags": "#casa #beleza #shopee #oferta",
+    "nicho": "casa",
+    "gancho_id": 7,
+    "preco": "36.49",
+    "price": "36.49",
+    "comissao_reais": "10.2172",
+    "score": 76.81,
+    "imagem": "https://cf.shopee.com.br/file/br-11134207-820lp-mr3k4oo1st8n8b",
+    "image": "https://cf.shopee.com.br/file/br-11134207-820lp-mr3k4oo1st8n8b"
+  },
+  {
+    "id": "24143786057",
+    "titulo": "CELIMAX Oil Control Mattifying Sun Stick SPF/PA++++ 50+, 19g",
+    "title": "CELIMAX Oil Control Mattifying Sun Stick SPF/PA++++ 50+, 19g",
+    "texto_tela": "CELIMAX controle oleosidade matificante",
+    "script": "Eu uso isso todo dia antes de sair de casa. CELIMAX controle oleosidade matificante por 147 reais e 55 centavos. Toca no card e aproveita.",
+    "narration": "Eu uso isso todo dia antes de sair de casa. CELIMAX controle oleosidade matificante por 147 reais e 55 centavos. Toca no card e aproveita.",
+    "texto": "Eu uso isso todo dia antes de sair de casa. CELIMAX controle oleosidade matificante por 147 reais e 55 centavos. Toca no card e aproveita.",
+    "link": "https://s.shopee.com.br/1BNeM7fyp6",
+    "url": "https://s.shopee.com.br/1BNeM7fyp6",
+    "hashtags": "#casa #beleza #shopee #oferta",
+    "nicho": "beleza",
+    "gancho_id": 1,
+    "preco": "147.55",
+    "price": "147.55",
+    "comissao_reais": "41.314",
+    "score": 68.1,
+    "imagem": "https://cf.shopee.com.br/file/sg-11134207-8258r-mrgw5ulvxngm0e",
+    "image": "https://cf.shopee.com.br/file/sg-11134207-8258r-mrgw5ulvxngm0e"
+  }
+]
