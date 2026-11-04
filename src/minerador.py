@@ -18,6 +18,7 @@ import argparse
 import hashlib
 import json
 import os
+import re
 import sys
 import time
 from datetime import date, timedelta
@@ -79,8 +80,8 @@ MIN_COMISSAO = 6.0
 MIN_VENDAS = 100
 MIN_RATING = 4.4
 
-MIN_TICKET = 25.0      # abaixo disso a comissao nao paga o esforco
-MAX_TICKET = 200.0     # 0 desativa. Faixa dos campeoes historicos: R$ 30 a 200
+MIN_TICKET = 25.0
+MAX_TICKET = 200.0
 
 PAGINAS_POR_KEYWORD = 3
 LIMITE_POR_PAGINA = 50
@@ -204,13 +205,55 @@ def shortlink(origin):
 # ---------------------------------------------------------------------------
 # TEXTO PARA O TTS
 # ---------------------------------------------------------------------------
+TRADUZIR = {
+    "oil control": "controle de oleosidade",
+    "mattifying": "matificante",
+    "matte finish": "acabamento seco",
+    "sun stick": "bastão protetor solar",
+    "sun screen": "protetor solar",
+    "sunscreen": "protetor solar",
+    "long lasting": "longa duração",
+    "waterproof": "à prova d'água",
+    "semi permanent": "semipermanente",
+    "hair dryer": "secador de cabelo",
+    "hair mask": "máscara capilar",
+    "hair oil": "óleo capilar",
+    "face wash": "sabonete facial",
+    "cleanser": "sabonete facial",
+    "makeup": "maquiagem",
+    "shampoo": "shampoo",
+    "serum": "sérum",
+    "cream": "creme",
+    "lotion": "loção",
+    "spray": "spray",
+    "mask": "máscara",
+    "brush": "escova",
+    "comb": "pente",
+    "set": "kit",
+    "kit": "kit",
+    "gift": "presente",
+    "oil": "óleo",
+    "hair": "cabelo",
+    "skin": "pele",
+    "gel": "gel",
+}
+
 LIXO_TITULO = {
     "premium", "profissional", "multiuso", "moderna", "moderno", "decoracao",
     "decoração", "livros", "banheiro", "cozinha", "sala", "bivolt", "original",
     "novo", "nova", "importado", "com", "de", "da", "do", "das", "dos",
     "para", "pra", "e", "em", "a", "o", "os", "as", "por", "aco", "aço",
-    "inox", "f", "unidade", "un", "pcs", "kit",
+    "inox", "f", "unidade", "un", "pcs", "kit", "dry", "felpudo",
 }
+
+
+def traduzir(titulo):
+    """Troca termos em ingles por portugues antes de falar."""
+    t = str(titulo)
+    for en in sorted(TRADUZIR, key=len, reverse=True):
+        if en in t.lower():
+            t = re.sub(re.escape(en), TRADUZIR[en], t, flags=re.I)
+    return t
 
 
 def falar_preco(valor):
@@ -233,7 +276,7 @@ def falar_preco(valor):
 def nome_curto(titulo, limite=42):
     """Reduz o titulo do marketplace a algo falavel em 2 segundos."""
     palavras = []
-    for p in str(titulo).split():
+    for p in traduzir(titulo).split():
         limpo = p.strip(",.;:-–—()º°")
         if not limpo:
             continue
@@ -251,10 +294,13 @@ def nome_curto(titulo, limite=42):
     curto = " ".join(palavras).strip()
     if len(curto) > limite:
         curto = curto[:limite].rsplit(" ", 1)[0]
-    return curto or str(titulo)[:limite].strip()
+    return curto or traduzir(titulo)[:limite].strip()
 
 
-GANCHOS = [
+# ---------------------------------------------------------------------------
+# GANCHOS POR NICHO
+# ---------------------------------------------------------------------------
+GANCHOS_CASA = [
     "Todo mundo tem esse problema em casa — e isso resolve em segundos.",
     "Olha o antes e depois. Não precisa fazer força.",
     "Isso você compra uma vez e usa todo dia.",
@@ -266,6 +312,28 @@ GANCHOS = [
     "Quem tem esse problema vai entender na hora.",
     "Simples, barato e resolve o que ninguém resolve.",
 ]
+
+GANCHOS_BELEZA = [
+    "Olha a textura. Não pesa e não deixa brilho.",
+    "Eu uso isso todo dia antes de sair de casa.",
+    "Olha como espalha rápido e não fica pegajoso.",
+    "Isso resolve o que maquiagem sozinha não cobre.",
+    "A diferença aparece já na primeira semana.",
+    "Não precisa de sete produtos. Um resolve.",
+    "Olha o resultado depois de aplicar.",
+    "Rende muito mais do que parece.",
+    "Pra quem tem pele oleosa, presta atenção nisso.",
+    "Simples de usar, e o resultado aparece.",
+]
+
+GANCHOS_PET = [
+    "Quem tem pet em casa sabe o quanto isso ajuda.",
+    "Olha como ele usa na hora.",
+    "Isso resolve aquela bagunça que ninguém aguenta.",
+    "Testei com o meu e funcionou.",
+    "Se você tem pet, vai querer isso.",
+]
+
 CTAS = [
     "Toque no card e veja o preço.",
     "Toca no card antes que acabe o estoque.",
@@ -276,18 +344,28 @@ CTAS = [
 ]
 
 
+def _ganchos(nicho):
+    if nicho == "beleza":
+        return GANCHOS_BELEZA
+    if nicho == "pet":
+        return GANCHOS_PET
+    return GANCHOS_CASA
+
+
 def roteiro(p, janela):
-    """Gancho rotaciona por data: produto que volta depois da janela sai novo."""
+    """Gancho coerente com o nicho e rotacionado por data."""
+    nicho = p.get("_nicho", "casa")
+    ganchos = _ganchos(nicho)
     rotacao = date.today().toordinal() // max(janela, 1)
     base = int(p.get("itemId") or 0)
     key = base + rotacao * 7
-    gancho = GANCHOS[key % len(GANCHOS)]
+    gancho = ganchos[key % len(ganchos)]
     cta = CTAS[(key // 3) % len(CTAS)]
     item = nome_curto(p.get("productName", ""))
     preco = falar_preco(p.get("priceMin"))
     p_txt = " por %s" % preco if preco else ""
     texto = "%s %s%s. %s" % (gancho, item, p_txt, cta)
-    return texto, key % len(GANCHOS)
+    return texto, key % len(ganchos)
 
 
 # ---------------------------------------------------------------------------
@@ -424,6 +502,27 @@ def _contar_elegiveis(candidatos, aplicar_teto):
     return n
 
 
+def _elegiveis_por_nicho(candidatos):
+    out = {}
+    for p in candidatos.values():
+        try:
+            com = float(p.get("commission") or 0)
+            ven = int(p.get("sales") or 0)
+            nota = float(p.get("ratingStar") or 0)
+            preco = float(p.get("priceMin") or 0)
+        except (TypeError, ValueError):
+            continue
+        if com < MIN_COMISSAO or ven < MIN_VENDAS or nota < MIN_RATING:
+            continue
+        if preco < MIN_TICKET:
+            continue
+        if MAX_TICKET > 0 and preco > MAX_TICKET:
+            continue
+        n = p.get("_nicho", "?")
+        out[n] = out.get(n, 0) + 1
+    return out
+
+
 def stats(candidatos):
     total = len(candidatos)
     sem_nota = sum(1 for p in candidatos.values() if not p.get("ratingStar"))
@@ -436,6 +535,7 @@ def stats(candidatos):
 
     sem_teto = _contar_elegiveis(candidatos, False)
     com_teto = _contar_elegiveis(candidatos, True)
+    por_nicho_ok = _elegiveis_por_nicho(candidatos)
 
     print("")
     print("=" * 62)
@@ -455,15 +555,17 @@ def stats(candidatos):
     print("  elegiveis sem teto:   %d" % sem_teto)
     print("  elegiveis com teto:   %d  (barrados por ticket: %d)"
           % (com_teto, sem_teto - com_teto))
+    print("  elegiveis por nicho:  %s" % por_nicho_ok)
     print("")
     if com_teto > 0:
         j = janela_ideal(com_teto, QTD_DEFAULT)
         print("  janela calculada:     %d dias a %d videos/dia"
               % (min(DIAS_HISTORICO_MAX, j), QTD_DEFAULT))
+        dias = com_teto / float(QTD_DEFAULT)
+        print("  folego total:         %.1f dias sem repetir" % dias)
     if sem_nota > 0:
         print("")
         print("  ATENCAO: produtos sem nota estao sendo reprovados.")
-        print("  Compare a GRADE A e a GRADE B abaixo.")
 
     _grade(candidatos, MIN_RATING, False,
            "GRADE A — nota %.1f (sem nota REPROVA)" % MIN_RATING)
@@ -471,8 +573,7 @@ def stats(candidatos):
            "GRADE B — nota %.1f (sem nota = neutro, APROVA)" % MIN_RATING)
 
     print("")
-    print("As grades NAO aplicam o teto de ticket. Use as linhas")
-    print("'elegiveis com teto' acima como referencia real do pool.")
+    print("As grades NAO aplicam o teto de ticket. Use 'elegiveis com teto'")
 
 
 # ---------------------------------------------------------------------------
@@ -610,8 +711,14 @@ def main():
     escolhidos = livres[:qtd]
 
     print("Filtro: %d candidatos | %s" % (len(candidatos), barrados))
-    print("Elegiveis: %d | janela: %d dias | bloqueados: %d | livres: %d"
-          % (len(elegiveis), janela, len(bloqueados), len(livres)))
+    print("Historico: %d registros | janela: %d dias | bloqueados: %d"
+          % (len(hist), janela, len(bloqueados)))
+    print("Elegiveis: %d | livres: %d" % (len(elegiveis), len(livres)))
+    if not hist:
+        print("")
+        print("AVISO: historico.json vazio ou inexistente.")
+        print("Todos os produtos estao livres — o controle de repeticao")
+        print("so passa a valer depois do primeiro run real (sem --seco).")
     if len(livres) < qtd:
         print("AVISO: pool livre menor que a quantidade pedida (%d)." % qtd)
 
@@ -668,7 +775,7 @@ def main():
         print("  · [%s] %s | R$ %s | gancho %d"
               % (x["nicho"], x["titulo"][:44],
                  x["comissao_reais"], x["gancho_id"]))
-        print("    script: %s" % x["script"][:110])
+        print("    script: %s" % x["script"][:120])
         print("    tela:   %s" % x["texto_tela"])
 
 
