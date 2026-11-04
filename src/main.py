@@ -7,6 +7,7 @@ import json
 import os
 import sys
 import urllib.request
+from datetime import datetime
 
 from tts import gerar_audio
 from video import montar_video
@@ -16,18 +17,32 @@ PASTA_SAIDA = "saida"
 PASTA_IMAGENS = "imagens"
 VOZ_PADRAO = "pt-BR-FranciscaNeural"
 
+ARQ_PRODUTOS = "produtos.json"
+ARQ_PUBLICACOES = "publicacoes.json"
 
-def carregar_produtos(caminho="produtos.json"):
-    """Aceita lista direta (minerador) ou dict com 'produtos' (formato antigo)."""
-    with open(caminho, encoding="utf-8-sig") as f:
-        dados = json.load(f)
+LEGENDA_USAR = "texto_tela"    # "texto_tela" (curto) ou "titulo" (completo)
+INCLUIR_HASHTAGS = False       # True adiciona uma terceira linha
+TAMANHO_MAX_LEGENDA = 90
+
+
+def carregar_json(caminho, padrao):
+    if not os.path.exists(caminho):
+        return padrao
+    try:
+        with open(caminho, encoding="utf-8-sig") as f:
+            return json.load(f)
+    except (json.JSONDecodeError, OSError):
+        return padrao
+
+
+def carregar_produtos(caminho=ARQ_PRODUTOS):
+    dados = carregar_json(caminho, [])
     if isinstance(dados, dict):
         return dados.get("produtos") or dados.get("itens") or []
     return dados if isinstance(dados, list) else []
 
 
 def campo(produto, *nomes, **kw):
-    """Retorna o primeiro valor nao vazio entre as variantes de chave."""
     for n in nomes:
         v = produto.get(n)
         if v not in (None, "", []):
@@ -42,14 +57,14 @@ def baixar_imagem(url, destino):
 
 
 def resolver_imagem(produto):
-    """URL baixa; arquivo local informado; ou imagens/{id}.* automatico."""
     os.makedirs(PASTA_IMAGENS, exist_ok=True)
     pid = str(campo(produto, "id")).strip()
     ref = str(campo(produto, "imagem", "image")).strip()
 
     if ref.startswith("http"):
         local = os.path.join(PASTA_IMAGENS, "%s.jpg" % pid)
-        baixar_imagem(ref, local)
+        if not os.path.exists(local) or os.path.getsize(local) < 1024:
+            baixar_imagem(ref, local)
         return local
 
     if ref and os.path.exists(ref):
@@ -62,8 +77,50 @@ def resolver_imagem(produto):
 
     raise FileNotFoundError(
         "Imagem nao encontrada para '%s'. Envie ao bot do Telegram com "
-        "legenda igual ao id, ou use --sem-envio para so gerar o video." % pid
+        "legenda igual ao id, ou use --sem-envio." % pid
     )
+
+
+def montar_legenda(produto):
+    base = campo(produto, LEGENDA_USAR, "texto_tela", "titulo", "title")
+    base = str(base).strip()
+    if len(base) > TAMANHO_MAX_LEGENDA:
+        base = base[:TAMANHO_MAX_LEGENDA].rsplit(" ", 1)[0]
+    link = str(campo(produto, "link_afiliado", "link", "url")).strip()
+    linhas = [base, link]
+    if INCLUIR_HASHTAGS:
+        tags = str(campo(produto, "hashtags")).strip()
+        if tags:
+            linhas.append(tags)
+    return "\n".join(l for l in linhas if l)
+
+
+def carregar_publicacoes():
+    dados = carregar_json(ARQ_PUBLICACOES, [])
+    if isinstance(dados, dict):
+        dados = dados.get("publicacoes") or []
+    return dados if isinstance(dados, list) else []
+
+
+def ja_publicado(pid, publicacoes):
+    return any(str(p.get("id")) == str(pid) for p in publicacoes)
+
+
+def registrar_publicacao(produto, publicacoes):
+    publicacoes.append({
+        "id": str(campo(produto, "id")),
+        "data": datetime.now().strftime("%Y-%m-%d"),
+        "hora": datetime.now().strftime("%H:%M"),
+        "nicho": campo(produto, "nicho", default="?"),
+        "gancho_id": campo(produto, "gancho_id"),
+        "texto_tela": campo(produto, "texto_tela", "titulo"),
+        "titulo": campo(produto, "titulo", "title"),
+        "link": campo(produto, "link", "url"),
+        "script": campo(produto, "script", "narration", "texto"),
+        "score": campo(produto, "score"),
+    })
+    with open(ARQ_PUBLICACOES, "w", encoding="utf-8") as f:
+        json.dump(publicacoes, f, ensure_ascii=False, indent=2)
 
 
 def processar(produtos, voz=VOZ_PADRAO, enviar=True, limite=0):
@@ -71,11 +128,18 @@ def processar(produtos, voz=VOZ_PADRAO, enviar=True, limite=0):
     if limite > 0:
         produtos = produtos[:limite]
 
-    ok, falhas = 0, 0
+    publicacoes = carregar_publicacoes()
+    ok, pulados, falhas = 0, 0, 0
 
     for i, produto in enumerate(produtos, 1):
         nome = str(campo(produto, "id")) or "produto_%d" % i
         print("[%d/%d] %s" % (i, len(produtos), nome))
+
+        if enviar and ja_publicado(nome, publicacoes):
+            print("   ja publicado — pulando")
+            pulados += 1
+            continue
+
         try:
             roteiro = campo(produto, "script", "narration", "texto")
             if not roteiro:
@@ -86,16 +150,14 @@ def processar(produtos, voz=VOZ_PADRAO, enviar=True, limite=0):
             audio = os.path.join(PASTA_SAIDA, "%s.mp3" % nome)
             asyncio.run(gerar_audio(roteiro, audio, voz))
 
-            titulo = campo(produto, "titulo", "title")
-            texto_tela = campo(produto, "texto_tela", default=titulo)
+            texto_tela = campo(produto, "texto_tela",
+                               default=campo(produto, "titulo", "title"))
             video = os.path.join(PASTA_SAIDA, "%s.mp4" % nome)
             montar_video(imagem, audio, texto_tela, video)
 
             if enviar:
-                link = campo(produto, "link_afiliado", "link", "url")
-                hashtags = campo(produto, "hashtags")
-                legenda = "%s\n%s\n\n%s" % (titulo, link, hashtags)
-                enviar_video(video, legenda.strip())
+                enviar_video(video, montar_legenda(produto))
+                registrar_publicacao(produto, publicacoes)
 
             ok += 1
             print("   OK")
@@ -103,7 +165,7 @@ def processar(produtos, voz=VOZ_PADRAO, enviar=True, limite=0):
             falhas += 1
             print("   FALHA: %s" % erro)
 
-    print("Resumo: %d ok, %d falhas" % (ok, falhas))
+    print("Resumo: %d ok, %d pulados, %d falhas" % (ok, pulados, falhas))
     if falhas and ok == 0:
         sys.exit(1)
 
